@@ -2,14 +2,14 @@
 
 ## Overview
 
-Infini-Transformer is a powerful and versatile transformer model designed for a wide range of natural language processing tasks. It leverages state-of-the-art techniques and architectures to achieve exceptional performance and scalability.
+Infini-Transformer ([https://arxiv.org/abs/2404.07143](https://arxiv.org/abs/2404.07143)) is a powerful and versatile transformer model designed for a wide range of natural language processing tasks. It leverages state-of-the-art techniques and architectures to achieve exceptional performance and scalability to infinite context lengths.
 
 ## Features
 
+- Scalable architecture for handling long sequences
 - Large-scale pre-training on diverse datasets
 - Support for multiple downstream tasks, including text classification, question answering, and language generation
 - Efficient fine-tuning for task-specific adaptation
-- Scalable architecture for handling long sequences
 
 ## Getting Started
 
@@ -18,12 +18,8 @@ To get started with Infini-Transformer:
 - Clone the repository:
 
 ```bash
-    git clone https://github.com/your-username/infini-transformer.git
+    git clone https://github.com/dingo-actual/infini-transformer.git
 ```
-
-## Contributing
-
-We welcome contributions to Infini-Transformer! If you would like to contribute, please follow the guidelines outlined in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
