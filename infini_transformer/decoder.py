@@ -5,10 +5,25 @@ from compressive_memory import CompressiveMemory
 
 
 class Decoder(nn.Module):
-    def __init__(self, dim_input, dim_hidden, dim_key, dim_value, num_heads, segment_len, update="linear", dropout: float = 0.0):
+    """Transformer decoder layer with compressive memory."""
+    def __init__(self, dim_input: int, dim_hidden: int, dim_key: int, dim_value: int, num_heads: int, segment_len: int, update="linear", dropout: float = 0.0):
+        """Initializes the module.
+
+        Args:
+            dim_input (int): Input dimension.
+            dim_hidden (int): Hidden dimension for the MLP.
+            dim_key (int): Key dimension for the CompressiveMemory.
+            dim_value (int): Value dimension for the CompressiveMemory.
+            num_heads (int): Number of attention heads for the CompressiveMemory.
+            segment_len (int): Segment length for the CompressiveMemory.
+            update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
+            dropout (float, optional): Dropout rate for the MLP. Defaults to 0.0.
+        """
         super(Decoder, self).__init__()
         
+        # Multi-head attention
         self.attn = CompressiveMemory(dim_input, dim_key, dim_value, num_heads, segment_len, update)
+        # MLP
         self.mlp = nn.Sequential(
             nn.Linear(dim_input, dim_hidden),
             nn.Dropout(dropout),
@@ -18,7 +33,17 @@ class Decoder(nn.Module):
         )
         self.layer_norm = nn.LayerNorm(dim_input)
         
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, dim_input).
+
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, seq_len, dim_input).
+        """
+        
+        # Apply multi-head attention, followed by MLP and layer normalization with residual connection.
         x_ = self.attn(x)
         x_ = self.mlp(x_)
         
