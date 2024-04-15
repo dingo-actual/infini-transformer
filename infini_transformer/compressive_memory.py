@@ -40,10 +40,6 @@ class CompressiveMemory(nn.Module):
         # Projection for output
         self.proj_out = nn.Linear(num_heads * dim_value, dim_input, bias=False)
         
-        # Initialize memory and normalization to None
-        self.mem = None
-        self.z = None
-        
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Applies Scaled Dot-Product Attention to the input tensor.
@@ -64,10 +60,8 @@ class CompressiveMemory(nn.Module):
         
         # Initialize mem and normalization
         # !!! Initialization was never specified in the paper, so this is an educated guess
-        if self.mem is None:
-            self.mem = torch.zeros(1, self.num_heads, self.dim_key, self.dim_value)
-        if self.z is None:
-            self.z = torch.ones(1, self.num_heads, self.dim_value, 1).repeat(batch_size, 1, 1, 1) / self.dim_value
+        mem = torch.zeros(1, self.num_heads, self.dim_key, self.dim_value)
+        z = torch.zeros(1, self.num_heads, self.dim_value, 1).repeat(batch_size, 1, 1, 1)
         
         for ix in range(n_seq):
             ix_lo = ix * self.segment_len
@@ -81,22 +75,24 @@ class CompressiveMemory(nn.Module):
             v = self.proj_v(x_seg).unsqueeze(1).view((batch_size, self.num_heads, self.segment_len, self.dim_value))
             q = self.proj_q(x_seg).unsqueeze(1).view((batch_size, self.num_heads, self.segment_len, self.dim_key))
             
+            # Pre-calculate sigma(q) for updating memory and calculating attention
+            sigma_q = (nn.functional.elu(q) + 1.0) # shape: (batch_size, num_heads, segment_len, dim_key)
+            
+            # Apply mem update
+            if self.update == "linear":
+                mem = mem + sigma_q.transpose(-2, -1) @ v
+            elif self.update == "delta":
+                sigma_k = nn.functional.elu(k) + 1.0
+                mem = mem + sigma_q.transpose(-2, -1) @ (v - (sigma_k @ mem) / (sigma_k @ z))
+            
+            # Apply normalization term update
+            z = z + (nn.functional.elu(k) + 1.0).sum(dim=-2, keepdim=True)
+            
             # Apply SDP attention
             att_dot = nn.functional.softmax(q @ k.transpose(-2, -1) / torch.sqrt(torch.tensor(self.dim_key)), dim=-1) @ v
             
             # Calculate normalized linear attention
-            sigma_q = (nn.functional.elu(q) + 1.0) # shape: (batch_size, num_heads, segment_len, dim_key)
-            att_mem = (sigma_q @ self.mem) / (sigma_q @ self.z) # shape: (batch_size, num_heads, segment_len, dim_value)
-            
-            # Apply mem update
-            if self.update == "linear":
-                self.mem = self.mem + sigma_q.transpose(-2, -1) @ v
-            elif self.update == "delta":
-                sigma_k = nn.functional.elu(k) + 1.0
-                self.mem = self.mem + sigma_q.transpose(-2, -1) @ (v - (sigma_k @ self.mem) / (sigma_k @ self.z))
-            
-            # Apply normalization term update
-            self.z = self.z + (nn.functional.elu(k) + 1.0).sum(dim=-2, keepdim=True)
+            att_mem = (sigma_q @ mem) / (sigma_q @ z) # shape: (batch_size, num_heads, segment_len, dim_value)
             
             # Calculate weighted average of dot-product and memory-based attention
             att = nn.functional.sigmoid(self.betas) * att_mem + (1 - nn.functional.sigmoid(self.betas)) * att_dot
@@ -106,8 +102,8 @@ class CompressiveMemory(nn.Module):
             out.append(self.proj_out(att))
             
         # Reset memory and normalization for next batch
-        self.mem = None
-        self.z = None
+        mem = None
+        z = None
         
         # Return concatenated full sequence from buffer
         return torch.concat(out, dim=1)
