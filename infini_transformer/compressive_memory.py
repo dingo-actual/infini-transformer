@@ -76,13 +76,6 @@ class CompressiveMemory(nn.Module):
             # Pre-calculate sigma(q) for updating memory and calculating attention
             sigma_q = (nn.functional.elu(q) + 1.0) # shape: (batch_size, num_heads, segment_len, dim_key)
             
-            # Apply mem update
-            if self.update == "linear":
-                mem = mem + sigma_q.transpose(-2, -1) @ v
-            elif self.update == "delta":
-                sigma_k = nn.functional.elu(k) + 1.0
-                mem = mem + sigma_q.transpose(-2, -1) @ (v - (sigma_k @ mem) / (sigma_k @ z))
-            
             # Apply normalization term update
             z = z + (nn.functional.elu(k) + 1.0).sum(dim=-2, keepdim=True)
             
@@ -91,6 +84,13 @@ class CompressiveMemory(nn.Module):
             
             # Calculate normalized linear attention
             att_mem = (sigma_q @ mem) / (sigma_q @ z) # shape: (batch_size, num_heads, segment_len, dim_value)
+
+            # Apply mem update
+            sigma_k = nn.functional.elu(k) + 1.0
+            if self.update == "linear":
+                mem = mem + sigma_k.transpose(-2, -1) @ v
+            elif self.update == "delta":
+                mem = mem + sigma_k.transpose(-2, -1) @ (v - (sigma_k @ mem) / (sigma_k @ z))
             
             # Calculate weighted average of dot-product and memory-based attention
             att = nn.functional.sigmoid(self.betas) * att_mem + (1 - nn.functional.sigmoid(self.betas)) * att_dot
