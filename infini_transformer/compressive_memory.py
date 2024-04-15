@@ -1,5 +1,3 @@
-#from typing import Tuple
-
 import torch
 from torch import nn
 
@@ -100,10 +98,6 @@ class CompressiveMemory(nn.Module):
             
             # Append output to buffer
             out.append(self.proj_out(att))
-            
-        # Reset memory and normalization for next batch
-        mem = None
-        z = None
         
         # Return concatenated full sequence from buffer
         return torch.concat(out, dim=1)
