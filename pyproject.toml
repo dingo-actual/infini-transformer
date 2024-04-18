@@ -1,0 +1,48 @@
+# Guide (user-friendly):
+# https://packaging.python.org/en/latest/guides/writing-pyproject-toml/
+# Specification (technical, formal):
+# https://packaging.python.org/en/latest/specifications/pyproject-toml/
+
+
+# Choosing a build backend:
+[build-system]
+requires = ["setuptools"]  # REQUIRED if [build-system] table is used
+build-backend = "setuptools.build_meta"  # If not defined, then legacy behavior can happen.
+
+
+[project]
+name = "infini-transformer"
+version = "0.1.0"
+description = "Infini-Transformer is a powerful and versatile transformer model designed for a wide range of natural language processing tasks."
+readme = "readme.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+keywords = ["deep learning", "LLM", "transformer"]
+authors = [
+  {name = "Ryan Taylor", email = "ryan@beta-reduce.net" }
+]
+maintainers = [
+  {name = "Ryan Taylor", email = "ryan@beta-reduce.net" }
+]
+
+# Classifiers help users find your project by categorizing it.
+classifiers = [
+  # How mature is this project? Common values are
+  #   3 - Alpha, 4 - Beta, 5 - Production/Stable
+  "Development Status :: 3 - Alpha",
+  # Indicate who your project is intended for
+  "Intended Audience :: Developers",
+  # Pick your license as you wish
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+]
+
+dependencies = [
+  "torch>=2.0.0"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/dingo-actual/infini-transformer"
+"Bug Reports" = "https://github.com/dingo-actual/infini-transformer/issues"
+"Publication" = "https://arxiv.org/abs/2404.07143"
+"Source" = "https://github.com/dingo-actual/infini-transformer/"

@@ -16,10 +16,14 @@ Infini-Transformer ([https://arxiv.org/abs/2404.07143](https://arxiv.org/abs/240
 To get started with Infini-Transformer:
 
 - Clone the repository:
+    ```bash
+        git clone https://github.com/dingo-actual/infini-transformer.git
+    ```
 
-```bash
-    git clone https://github.com/dingo-actual/infini-transformer.git
-```
+- Install it from source:
+    ```bash
+        pip install git+https://github.com/dingo-actual/infini-transformer.git
+    ```
 
 ## License
 
