@@ -102,7 +102,8 @@ class CompressiveMemory(nn.Module):
         # Return concatenated full sequence from buffer
         return torch.concat(out, dim=1)
 
-if __name__ == "__main__":
+
+def demo_compressive_memory():
     # Example usage
     dim_input = 512
     dim_key = 64
@@ -112,9 +113,11 @@ if __name__ == "__main__":
     update = "linear"
 
     model = CompressiveMemory(dim_input, dim_key, dim_value, num_heads, segment_len, update)
-    
+
     # Generate some random input
     batch = torch.randn(4, 128, dim_input)
-    out = model(batch)
-    
-    _ = None
+    model(batch)
+
+
+if __name__ == "__main__":
+    demo_compressive_memory()
