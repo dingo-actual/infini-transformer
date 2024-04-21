@@ -53,7 +53,7 @@ class CompressiveMemory(nn.Module):
         """
         batch_size, seq_len, _ = x.shape
 
-        n_seq, rem = divmod(seq_len, self.segment_len)
+        num_segments, rem = divmod(seq_len, self.segment_len)
 
         if rem != 0:
             raise ValueError(
@@ -64,24 +64,29 @@ class CompressiveMemory(nn.Module):
         # Initialize mem and normalization
         # !!! Initialization was never specified in the paper, so this is an educated guess
         mem = torch.zeros(1, self.num_heads, self.dim_key, self.dim_value)
-        z = torch.zeros(1, self.num_heads, self.dim_value,
-                        1).repeat(batch_size, 1, 1, 1)
+        z = torch.zeros(batch_size, self.num_heads, self.dim_value, 1)
+        
+        # Project the input tensor to get the key, value, and query tensors
+        k_full = self.proj_k(x).unsqueeze(1).view(
+            (batch_size, self.num_heads, self.segment_len * num_segments, self.dim_key))
+        v_full = self.proj_v(x).unsqueeze(1).view(
+            (batch_size, self.num_heads, self.segment_len * num_segments, self.dim_value))
+        q_full = self.proj_q(x).unsqueeze(1).view(
+            (batch_size, self.num_heads, self.segment_len * num_segments, self.dim_key))
+        
+        # If attention mask is given, resize it to match the segment tensors
+        if mask is not None:
+            mask = mask.unsqueeze(0).unsqueeze(0).repeat((batch_size, self.num_heads, 1, 1))
 
-        for ix in range(n_seq):
+        for ix in range(num_segments):
             ix_lo = ix * self.segment_len
             ix_hi = ix_lo + self.segment_len
 
-            # Extract segment from input
-            x_seg = x[:, ix_lo:ix_hi, :]
-
-            # Project the input tensor to get the key, value, and query tensors
-            k = self.proj_k(x_seg).unsqueeze(1).view(
-                (batch_size, self.num_heads, self.segment_len, self.dim_key))
-            v = self.proj_v(x_seg).unsqueeze(1).view(
-                (batch_size, self.num_heads, self.segment_len, self.dim_value))
-            q = self.proj_q(x_seg).unsqueeze(1).view(
-                (batch_size, self.num_heads, self.segment_len, self.dim_key))
-
+            # Extract segment from key, value and query tensors
+            k = k_full[:, :, ix_lo:ix_hi, :]
+            v = v_full[:, :, ix_lo:ix_hi, :]
+            q = q_full[:, :, ix_lo:ix_hi, :]
+            
             # Pre-calculate sigma(q) for updating memory and calculating attention
             # shape: (batch_size, num_heads, segment_len, dim_key)
             sigma_q = (nn.functional.elu(q) + 1.0)
@@ -93,7 +98,6 @@ class CompressiveMemory(nn.Module):
             scores = q @ k.transpose(-2, -1) / torch.sqrt(torch.tensor(self.dim_key))
             if mask is not None:
                 if mask.dtype == torch.bool:
-                    mask = mask.unsqueeze(0).unsqueeze(0).repeat((batch_size, self.num_heads, 1, 1))
                     scores.masked_fill_(torch.logical_not(mask), float('-inf'))
                 else:
                     scores += mask.view((batch_size, self.num_heads, seq_len, seq_len))
