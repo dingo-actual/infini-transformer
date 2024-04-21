@@ -35,4 +35,6 @@ This project is licensed under the [MIT License](LICENSE).
 
 We would like to thank the researchers and developers whose work has inspired and contributed to the development of Infini-Transformer.
 
+Also, we'd like to give special thanks to all the contributors, collaborators and people who have given feedback. Your efforts have made what was a rough outline of an implementation into something actually usable.
+
 If you have any questions or need further assistance, please feel free to reach out to me at [ryan@beta-reduce.net](ryan@beta-reduce.net).
