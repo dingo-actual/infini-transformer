@@ -76,7 +76,6 @@ class MoDInfiniTransformer(InfiniTransformer):
         num_heads: int,
         segment_len: int,
         sampling_factor: int,
-        sampling_hidden_dim: int,
         update="linear",
         dropout: float = 0.0
     ):
@@ -90,7 +89,6 @@ class MoDInfiniTransformer(InfiniTransformer):
             num_heads (int): Number of attention heads for the CompressiveMemory.
             segment_len (int): Segment length for the CompressiveMemory.
             sampling_factor (int): Reciprocal of the sampling rate for the Mixture-of-Depths mechanism.
-            sampling_hidden_dim (int): Hidden dimension for the sampling MLP.
             update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
             dropout (float, optional): Dropout rate for the MLP. Defaults to 0.0.
 
@@ -123,13 +121,6 @@ class MoDInfiniTransformer(InfiniTransformer):
         # Projection for tensor of logits when sampling
         self.proj_sampling = nn.Linear(dim_input, 1)
 
-        # MLP for predicting selection of tokens
-        self.mlp_sampling = nn.Sequential(
-            nn.Linear(dim_input, sampling_hidden_dim),
-            nn.ReLU(),
-            nn.Linear(sampling_hidden_dim, 1)
-        )
-
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Forward pass.
 
@@ -142,9 +133,6 @@ class MoDInfiniTransformer(InfiniTransformer):
             torch.Tensor: Token selection mask of shape (batch_size * seq_len, 1).
             torch.Tensor: Predicted token selection scores of shape (batch_size * seq_len, 1) or None.
         """
-        # Initialize sample_scores_pred to None
-        sample_scores_pred = None
-
         # Calculate number of total segments, samples
         batch_size, seq_len, _ = x.shape
         num_segments = seq_len // self.full_segment_len
@@ -153,13 +141,8 @@ class MoDInfiniTransformer(InfiniTransformer):
         # Initialize list of token sample masks
         sample_masks = []
 
-        # If training, use linear embedding for sample scores
-        if self.training:
-            sample_scores = self.proj_sampling(x).squeeze(-1)
-            sample_scores_pred = self.mlp_sampling(x).squeeze(-1)
-        # Otherwise, use MLP for sample scores
-        else:
-            sample_scores = self.mlp_sampling(x).squeeze(-1)
+        # Use linear embedding for sample scores
+        sample_scores = self.proj_sampling(x).squeeze(-1)
 
         # For each segment, sample the tokens with the highest scores
         for seg_num in range(num_segments):
@@ -167,15 +150,20 @@ class MoDInfiniTransformer(InfiniTransformer):
             ix_lo = seg_num * self.full_segment_len
             ix_hi = ix_lo + self.full_segment_len
 
-            # Argsort by sample scores to get indices of tokens to keep
-            sort_ixs = torch.argsort(
-                sample_scores[:, ix_lo:ix_hi], dim=1, descending=True)
+            if self.train:
+                # During training, take the top-k tokens by score
+                # Argsort by sample scores to get indices of tokens to keep
+                sort_ixs = torch.argsort(
+                    sample_scores[:, ix_lo:ix_hi], dim=1, descending=True)
 
-            # Convert token indices to a binary mask
-            sample_mask_seg = torch.zeros_like(
-                sample_scores[:, ix_lo:ix_hi], device=x.device)
-            sample_mask_seg.scatter_(
-                dim=1, index=sort_ixs[:, :samples_per_segment], value=1.0)
+                # Convert token indices to a binary mask
+                sample_mask_seg = torch.zeros_like(
+                    sample_scores[:, ix_lo:ix_hi], device=x.device)
+                sample_mask_seg.scatter_(
+                    dim=1, index=sort_ixs[:, :samples_per_segment], value=1.0)
+            else:
+                # During inference, take the tokens with score greater than zero
+                sample_mask_seg = (sample_scores[:, ix_lo:ix_hi] > 0.0).float()
 
             sample_masks.append(sample_mask_seg)
 
@@ -188,16 +176,15 @@ class MoDInfiniTransformer(InfiniTransformer):
         x_ = self.attn(x_, mask)
         x_ = self.mlp(x_)
 
-        # Add result of attended tokens to the result (equivalent to making the result for non-attended tokens zero)
+        # Add result of attended tokens to the result (equivalent to making the result 
+        # for non-attended tokens zero)
         x[sample_mask.unsqueeze(-1).repeat((1, 1, self.dim_input))] += x_.view(-1)
 
-        # If sample_scores and sample_mask are not None, flatten them
-        if sample_scores_pred is not None:
-            sample_scores_pred = sample_scores_pred.view((-1, 1))
-        if sample_mask is not None:
-            sample_mask = sample_mask.view((-1, 1)).float()
+        # Flatten sample scores and concatenation of top-k masks for auxillary training task
+        sample_scores = sample_scores.view((-1, 1))
+        sample_mask = sample_mask.view((-1, 1)).float()
 
-        return self.layer_norm(x), sample_mask, sample_scores_pred
+        return self.layer_norm(x), sample_mask, sample_scores
 
 
 def demo_mod_infini_transformer():
