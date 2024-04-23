@@ -1,3 +1,4 @@
+import math
 from typing import Optional, Tuple
 
 import torch
@@ -17,7 +18,8 @@ class InfiniTransformer(nn.Module):
         dim_value: int,
         num_heads: int,
         segment_len: int,
-        update="linear",
+        update: str = "linear",
+        causal: bool = False,
         dropout: float = 0.0
     ):
         """Initializes the module.
@@ -30,13 +32,14 @@ class InfiniTransformer(nn.Module):
             num_heads (int): Number of attention heads for the CompressiveMemory.
             segment_len (int): Segment length for the CompressiveMemory.
             update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
+            causal (bool, optional): Whether to use causal attention masking for the CompressiveMemory. Defaults to False.
             dropout (float, optional): Dropout rate for the MLP. Defaults to 0.0.
         """
         super(InfiniTransformer, self).__init__()
 
         # Multi-head attention
         self.attn = CompressiveMemory(
-            dim_input, dim_key, dim_value, num_heads, segment_len, update)
+            dim_input, dim_key, dim_value, num_heads, segment_len, update, causal)
         # MLP
         self.mlp = nn.Sequential(
             nn.Linear(dim_input, dim_hidden),
@@ -47,18 +50,18 @@ class InfiniTransformer(nn.Module):
         )
         self.layer_norm = nn.LayerNorm(dim_input)
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
 
         Args:
             x (torch.Tensor): Input tensor of shape (batch_size, seq_len, dim_input).
-            mask (torch.Tensor, optional): Attention mask of shape (seq_len, seq_len). Defaults to None.
+
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, seq_len, dim_input).
         """
 
         # Apply multi-head attention, followed by MLP and layer normalization with residual connection.
-        x_ = self.attn(x, mask)
+        x_ = self.attn(x)
         x_ = self.mlp(x_)
 
         return self.layer_norm(x_ + x)
@@ -77,6 +80,7 @@ class MoDInfiniTransformer(InfiniTransformer):
         segment_len: int,
         sampling_factor: int,
         update="linear",
+        causal: bool = False,
         dropout: float = 0.0
     ):
         """Instantiate module.
@@ -90,16 +94,12 @@ class MoDInfiniTransformer(InfiniTransformer):
             segment_len (int): Segment length for the CompressiveMemory.
             sampling_factor (int): Reciprocal of the sampling rate for the Mixture-of-Depths mechanism.
             update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
+            causal (bool, optional): Whether to use causal attention masking for the CompressiveMemory. Defaults to False.
             dropout (float, optional): Dropout rate for the MLP. Defaults to 0.0.
 
         Raises:
             ValueError: Segment length not divisible by sampling factor.
         """
-        # Check that segment length is divisible by sampling factor; if not, raise an error
-        if segment_len % sampling_factor != 0:
-            raise ValueError(
-                "Segment length must be divisible by sampling factor.")
-
         # Initialize ordinary InfiniTransformer, but with segment length reduced by sampling_factor
         super(MoDInfiniTransformer, self).__init__(
             dim_input=dim_input,
@@ -107,13 +107,14 @@ class MoDInfiniTransformer(InfiniTransformer):
             dim_key=dim_key,
             dim_value=dim_value,
             num_heads=num_heads,
-            segment_len=segment_len // sampling_factor,
+            segment_len=math.ceil(segment_len / sampling_factor),
             update=update,
+            causal=causal,
             dropout=dropout
         )
 
         # Record additional init arguments for forward pass
-        self.segment_len = segment_len // sampling_factor
+        self.segment_len = math.ceil(segment_len / sampling_factor)
         self.full_segment_len = segment_len
         self.sampling_factor = sampling_factor
         self.dim_input = dim_input
@@ -121,12 +122,32 @@ class MoDInfiniTransformer(InfiniTransformer):
         # Projection for tensor of logits when sampling
         self.proj_sampling = nn.Linear(dim_input, 1)
 
-    def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        """Forward pass wrapper -- used to check at inference time whether to handle each observation individually.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, dim_input).
+
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, seq_len, dim_input).
+            torch.Tensor: Token selection mask of shape (batch_size * seq_len, 1) or None.
+            torch.Tensor: Predicted token selection scores of shape (batch_size * seq_len, 1) or None.
+        """
+        if self.train:
+            return self.forward_(x)
+        else:
+            out = []
+            for ix in range(x.size(0)):
+                obs_out, _, _ = self.forward_(x[ix:ix+1])
+                out.append(obs_out)
+                
+            return torch.cat(out, dim=0), None, None
+                
+    def forward_(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Forward pass.
 
         Args:
             x (torch.Tensor): Input tensor of shape (batch_size, seq_len, dim_input).
-            mask (Optional[torch.Tensor], optional): Attention mask. Defaults to None.
 
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, seq_len, dim_input).
@@ -135,8 +156,8 @@ class MoDInfiniTransformer(InfiniTransformer):
         """
         # Calculate number of total segments, samples
         batch_size, seq_len, _ = x.shape
-        num_segments = seq_len // self.full_segment_len
-        samples_per_segment = self.full_segment_len // self.sampling_factor
+        num_segments, rem = divmod(seq_len, self.full_segment_len)
+        num_segments += 1 if rem > 0 else 0
 
         # Initialize list of token sample masks
         sample_masks = []
@@ -160,7 +181,7 @@ class MoDInfiniTransformer(InfiniTransformer):
                 sample_mask_seg = torch.zeros_like(
                     sample_scores[:, ix_lo:ix_hi], device=x.device)
                 sample_mask_seg.scatter_(
-                    dim=1, index=sort_ixs[:, :samples_per_segment], value=1.0)
+                    dim=1, index=sort_ixs[:, :self.segment_len], value=1.0)
             else:
                 # During inference, take the tokens with score greater than zero
                 sample_mask_seg = (sample_scores[:, ix_lo:ix_hi] > 0.0).float()
@@ -173,7 +194,7 @@ class MoDInfiniTransformer(InfiniTransformer):
         # Apply multi-head attention to sample, followed by MLP
         sample_shape = (batch_size, self.segment_len * num_segments, self.dim_input)
         x_ = x[sample_mask.unsqueeze(-1).repeat((1, 1, self.dim_input))].view(sample_shape)
-        x_ = self.attn(x_, mask)
+        x_ = self.attn(x_)
         x_ = self.mlp(x_)
 
         # Add result of attended tokens to the result (equivalent to making the result 
@@ -199,24 +220,13 @@ def demo_mod_infini_transformer():
     num_heads = 8
     segment_len = 2048
     sampling_factor = 8
-    sampling_hidden_dim = 1024
     update = "linear"
     dropout = 0.1
+    
 
     # Define batch dimensions
     seq_len = 4096
     batch_size = 2
-
-    # Create causal attention mask
-    attn_mask = torch.tril(
-        torch.ones(
-            (
-                segment_len // sampling_factor,
-                segment_len // sampling_factor
-            )
-        ),
-        diagonal=0
-    ).bool()
 
     # Create the MoDInfiniTransformer layer
     layer = MoDInfiniTransformer(
@@ -227,7 +237,6 @@ def demo_mod_infini_transformer():
         num_heads=num_heads,
         segment_len=segment_len,
         sampling_factor=sampling_factor,
-        sampling_hidden_dim=sampling_hidden_dim,
         update=update,
         dropout=dropout
     )
@@ -237,11 +246,11 @@ def demo_mod_infini_transformer():
 
     # Test outputs for the case where the net is training
     layer.train()
-    x_att, sample_mask, sample_scores_pred = layer(x, mask=attn_mask)
+    x_att, sample_mask, sample_scores_pred = layer(x)
 
     # Test output for the case where the net is not training
     layer.eval()
-    x_att, sample_mask, sample_scores_pred = layer(x, mask=attn_mask)
+    x_att, sample_mask, sample_scores_pred = layer(x)
 
 
 if __name__ == "__main__":
