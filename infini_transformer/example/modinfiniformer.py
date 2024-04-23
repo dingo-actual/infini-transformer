@@ -20,14 +20,10 @@ class NextTokenModel(nn.Module):
         segment_len: int,
         sampling_factor: int,
         update="linear",
+        causal: bool = False,
         dropout: float = 0.0,
-        attention_mask: Optional[torch.Tensor] = None,
-        attention_mask_mod: Optional[torch.Tensor] = None,
     ):
         super(NextTokenModel, self).__init__()
-        
-        self.attention_mask = attention_mask
-        self.attention_mask_mod = attention_mask_mod
         
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
         
@@ -44,6 +40,7 @@ class NextTokenModel(nn.Module):
                         segment_len=segment_len,
                         sampling_factor=sampling_factor,
                         update=update,
+                        causal=causal,
                         dropout=dropout
                     )
                 )
@@ -57,6 +54,7 @@ class NextTokenModel(nn.Module):
                         num_heads=num_heads,
                         segment_len=segment_len,
                         update=update,
+                        causal=causal,
                         dropout=dropout
                     )
                 )
@@ -65,7 +63,7 @@ class NextTokenModel(nn.Module):
             self.proj_final = nn.Linear(embedding_dim, vocab_size)
             self.softmax = nn.Softmax(dim=-1)
             
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor], List[torch.Tensor]]:
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List[Optional[torch.Tensor]], List[Optional[torch.Tensor]]]:
         mod_token_actuals = []
         mod_token_preds = []
         
@@ -124,38 +122,29 @@ def train_model(
             optimizer.step()
             
             print(
-                f'Epoch: {epoch+1}/epochs ({ix+1}/{len(dataloader_train)})  |  Training Loss: {loss.detach().cpu().item():.6f}\r',
+                f'Epoch: {epoch+1}/epochs ({ix+1}/{len(dataloader_train)})  |  Training Loss: {loss_main.detach().cpu().item():.6f}\r',
                 end=""
             )
             
         lr_schedule.step()
         
         with torch.no_grad():
-            total_loss_main = 0.0
-            total_loss_aux = 0.0
+            total_loss = 0.0
             num_obs = 0
             
             for batch in dataloader_val:
                 batch = batch.to(device)
                 target = batch[:, 1:].clone()
 
-                preds, mod_actuals, mod_preds = model(batch)
+                preds, _, _ = model(batch)
 
-                total_loss_main += loss_fn_main(input=preds[:, :-1, :], target=target).detach().cpu().item() * batch.size(0)
-                total_loss_aux += sum(
-                    [
-                        loss_fn_sampling(input=mod_pred, target=mod_actual).detach().cpu().item() 
-                        for mod_actual, mod_pred in zip(mod_actuals, mod_preds)
-                    ]
-                ) * batch.size(0)
+                total_loss += loss_fn_main(input=preds[:, :-1, :], target=target).detach().cpu().item() * batch.size(0)
                 num_obs += batch.size(0)
                 
-            val_loss_main = total_loss_main / num_obs
-            val_loss_aux = total_loss_aux / num_obs
-            val_loss = val_loss_main + val_loss_aux
+            val_loss = total_loss / num_obs
             
             print(
-                f'\nEpoch: {epoch+1}/{epochs}  |  Validation Loss -- (CE): {val_loss_main:.6f}, (Sampling): {val_loss_aux:.6f},  (Total): {val_loss:.6f}'
+                f'\nEpoch: {epoch+1}/{epochs}  |  Validation Loss -- (CE): {val_loss:.6f}'
             )
 
     return model
