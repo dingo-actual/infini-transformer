@@ -63,7 +63,7 @@ class NextTokenModel(nn.Module):
             self.proj_final = nn.Linear(embedding_dim, vocab_size)
             self.softmax = nn.Softmax(dim=-1)
             
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List[Optional[torch.Tensor]], List[Optional[torch.Tensor]]]:
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, List[torch.Tensor], List[Optional[torch.Tensor]]]:
         mod_token_actuals = []
         mod_token_preds = []
         
