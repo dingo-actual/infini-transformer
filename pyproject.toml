@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"  # If not defined, then legacy behavior 
 
 [project]
 name = "infini-transformer"
-version = "0.2.1"
+version = "0.2.2"
 description = "Infini-Transformer is a powerful and versatile transformer model designed for a wide range of natural language processing tasks."
 readme = "readme.md"
 requires-python = ">=3.8"
