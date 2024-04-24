@@ -4,7 +4,8 @@ from typing import Optional, Tuple
 import torch
 from torch import nn
 
-from compressive_memory import CompressiveMemory
+from .compressive_memory import CompressiveMemory
+from .activations import ACTIVATIONS
 
 
 class InfiniTransformer(nn.Module):
@@ -17,6 +18,7 @@ class InfiniTransformer(nn.Module):
         dim_key: int,
         dim_value: int,
         num_heads: int,
+        activation: str,
         segment_len: int,
         update: str = "linear",
         causal: bool = False,
@@ -30,6 +32,7 @@ class InfiniTransformer(nn.Module):
             dim_key (int): Key dimension for the CompressiveMemory.
             dim_value (int): Value dimension for the CompressiveMemory.
             num_heads (int): Number of attention heads for the CompressiveMemory.
+            activation (str): Activation function to use for the MLP. Must be a key in the ACTIVATIONS dictionary.
             segment_len (int): Segment length for the CompressiveMemory.
             update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking for the CompressiveMemory. Defaults to False.
@@ -41,10 +44,16 @@ class InfiniTransformer(nn.Module):
         self.attn = CompressiveMemory(
             dim_input, dim_key, dim_value, num_heads, segment_len, update, causal)
         # MLP
+        if activation not in ACTIVATIONS:
+            raise ValueError(f"Invalid activation function: {activation}")
+        if activation in ["swiglu", "geglu", "ffnglu", "ffngeglu", "ffnswiglu"]:
+            act = ACTIVATIONS[activation](dim_hidden)
+        else:
+            act = ACTIVATIONS[activation]()
         self.mlp = nn.Sequential(
             nn.Linear(dim_input, dim_hidden),
             nn.Dropout(dropout),
-            nn.ReLU(),
+            act,
             nn.Linear(dim_hidden, dim_input),
             nn.Dropout(dropout)
         )
@@ -77,6 +86,7 @@ class MoDInfiniTransformer(InfiniTransformer):
         dim_key: int,
         dim_value: int,
         num_heads: int,
+        activation: str,
         segment_len: int,
         sampling_factor: int,
         update="linear",
@@ -91,6 +101,7 @@ class MoDInfiniTransformer(InfiniTransformer):
             dim_key (int): Key dimension for the CompressiveMemory.
             dim_value (int): Value dimension for the CompressiveMemory.
             num_heads (int): Number of attention heads for the CompressiveMemory.
+            activation (str): Activation function to use for the MLP. Must be a key in the ACTIVATIONS dictionary.
             segment_len (int): Segment length for the CompressiveMemory.
             sampling_factor (int): Reciprocal of the sampling rate for the Mixture-of-Depths mechanism.
             update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
@@ -107,6 +118,7 @@ class MoDInfiniTransformer(InfiniTransformer):
             dim_key=dim_key,
             dim_value=dim_value,
             num_heads=num_heads,
+            activation=activation,
             segment_len=math.ceil(segment_len / sampling_factor),
             update=update,
             causal=causal,
@@ -218,6 +230,7 @@ def demo_mod_infini_transformer():
     dim_key = 64
     dim_value = 64
     num_heads = 8
+    activation = "ffngeglu"
     segment_len = 2048
     sampling_factor = 8
     update = "linear"
@@ -235,6 +248,7 @@ def demo_mod_infini_transformer():
         dim_key=dim_key,
         dim_value=dim_value,
         num_heads=num_heads,
+        activation=activation,
         segment_len=segment_len,
         sampling_factor=sampling_factor,
         update=update,
@@ -251,7 +265,3 @@ def demo_mod_infini_transformer():
     # Test output for the case where the net is not training
     layer.eval()
     x_att, sample_mask, sample_scores_pred = layer(x)
-
-
-if __name__ == "__main__":
-    demo_mod_infini_transformer()
