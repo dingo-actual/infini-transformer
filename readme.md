@@ -231,7 +231,7 @@ During training, we must account for the additional outputs from `MoDInfiniForme
 
 ### Example Usage
 
-Please see [example/modinfiniformer.py](example/modinfiniformer.py) for an example of a model and training routine using the `MoDInfiniTransformer` module.
+Please see [infini_transformer/example/modinfiniformer.py](infini_transformer/example/modinfiniformer.py) for an example of a model and training routine using the `MoDInfiniTransformer` module.
 
 More examples will be forthcoming.
 
