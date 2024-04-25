@@ -10,7 +10,7 @@ Infini-Transformer ([https://arxiv.org/abs/2404.07143](https://arxiv.org/abs/240
 - Large-scale pre-training on diverse datasets
 - Support for multiple downstream tasks, including text classification, question answering, and language generation
 - Efficient fine-tuning for task-specific adaptation
-- Includes a Mixture-of-Depths transformer layer that incorporates Infini-Attention ([https://arxiv.org/abs/2404.02258](https://arxiv.org/abs/2404.02258))
+- Includes a Mixture-of-Depths ([https://arxiv.org/abs/2404.02258](https://arxiv.org/abs/2404.02258)) transformer layer that incorporates Infini-Attention
 
 ## Getting Started
 
