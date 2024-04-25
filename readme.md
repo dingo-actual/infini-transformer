@@ -1,5 +1,17 @@
 # Infini-Transformer
 
+- [Infini-Transformer](#infini-transformer)
+  - [Overview](#overview)
+  - [Features](#features)
+  - [Getting Started](#getting-started)
+  - [Usage](#usage)
+    - [`CompressiveMemory`](#compressivememory)
+    - [`InfiniTransformer`](#infinitransformer)
+    - [`MoDInfiniTransformer`](#modinfinitransformer)
+    - [Example Usage](#example-usage)
+  - [License](#license)
+  - [Acknowledgments](#acknowledgments)
+
 ## Overview
 
 Infini-Transformer ([https://arxiv.org/abs/2404.07143](https://arxiv.org/abs/2404.07143)) is a powerful and versatile transformer model designed for a wide range of natural language processing tasks. It leverages state-of-the-art techniques and architectures to achieve exceptional performance and scalability to infinite context lengths.
@@ -114,7 +126,7 @@ The `InfiniTransformer` module takes the following arguments:
   - `"geglu"`: Gated Gaussian Error Linear Unit (GeGELU) activation
   - `"ffnglu"`: Feed-Forward Network with Gated Linear Unit (FFNGLU) activation
   - `"ffngeglu"`: Feed-Forward Network with Gated Gaussian Error Linear Unit (FFNGeGLU) activation
-  - `"ffnswiglu"`: Feed-Forward Network with Swish Gated Linear Unit (FFNSwiGLU)
+  - `"ffnswiglu"`: Feed-Forward Network with Swish Gated Linear Unit (FFNSwiGLU) activation
 
 - `segment_len`: The length of each segment in the recurrent attention computation.
 - `update`: The type of update to use for the memory matrix. Can be "linear" or "delta". (Default is "linear".)
@@ -188,7 +200,7 @@ The `MoDInfiniTransformer` module takes the following arguments:
   - `"geglu"`: Gated Gaussian Error Linear Unit (GeGELU) activation
   - `"ffnglu"`: Feed-Forward Network with Gated Linear Unit (FFNGLU) activation
   - `"ffngeglu"`: Feed-Forward Network with Gated Gaussian Error Linear Unit (FFNGeGLU) activation
-  - `"ffnswiglu"`: Feed-Forward Network with Swish Gated Linear Unit (FFNSwiGLU)
+  - `"ffnswiglu"`: Feed-Forward Network with Swish Gated Linear Unit (FFNSwiGLU) activation
 
 - `segment_len`: The length of each segment in the recurrent attention computation.
 - `sampling_factor`: A numeric value in the interval (1, `segment_len`) that determines the number of tokens to select from each segment during the top-k selection. A larger value of `sampling_factor` results in fewer tokens being selected.
@@ -227,7 +239,7 @@ batch = torch.randn(
 output, select_target, select_pred = tfm(batch)
 ```
 
-During training, we must account for the additional outputs from `MoDInfiniFormer` so we can use them for the binary cross-entropy loss. See [example/modinfiniformer.py](example/modinfiniformer.py) for an example of how to incorporate the additional outputs into both the overall model output and the training loop.
+During training, we must account for the additional outputs from `MoDInfiniFormer` so we can use them for the binary cross-entropy loss. See [infini_transformer/example/modinfiniformer.py](infini_transformer/example/modinfiniformer.py) for an example of how to incorporate the additional outputs into both the overall model output and the training loop.
 
 ### Example Usage
 
