@@ -43,10 +43,10 @@ The outputs from each recurrent step are concatenated along the sequence dimensi
 The update for the memory matrix has two variants: linear and delta.
 
 The linear update rule is:
-$$M_t = M_{t-1} + (\textrm{ELU}(K_{t-1}) + 1)^TV_{t-1}$$
+$$M_t = M_{t-1} + \bigl(\textrm{ELU}(K_{t-1}\bigr) + 1)^TV_{t-1}$$
 
 The delta update rule is:
-$$M_t = M_{t-1} + (\textrm{ELU}(K_{t-1}) + 1)^T\frac{(V_{t-1} - \textrm{ELU}(K_{t-1}) + 1)M_{t-1}}{(\textrm{ELU}(K_{t-1}) + 1)z_{t-1}}$$
+$$M_t = M_{t-1} + \bigl(\textrm{ELU}(K_{t-1}) + 1\bigr)^T \biggl( V_{t-1} - \frac{(\textrm{ELU}(K_{t-1}) + 1)M_{t-1}}{(\textrm{ELU}(K_{t-1}) + 1)z_{t-1}}\biggr)$$
 
 Where $M_i$ is the memory matrix and $z_i$ is the normalization vector at step $i$. The $K$ and $V$ matrices are subscripted to indicate the recurrent steps they correspond to.
 
