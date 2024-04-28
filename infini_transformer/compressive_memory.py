@@ -16,7 +16,8 @@ class CompressiveMemory(nn.Module):
         num_heads: int, 
         segment_len: int, 
         update: str = "linear",
-        causal: bool = False
+        causal: bool = False,
+        init_state_learnable: bool = False
     ):
         """Initialize module.
 
@@ -28,6 +29,7 @@ class CompressiveMemory(nn.Module):
             segment_len (int): Segment length (must be a factor of the input sequence length).
             update (str, optional): Type of memory update rule to use ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking. Defaults to False.
+            init_state_learnable (bool, optional): Whether the initial memory and normalization are learnable. Defaults to False.
         """
         super(CompressiveMemory, self).__init__()
 
@@ -52,6 +54,15 @@ class CompressiveMemory(nn.Module):
 
         # Projection for output
         self.proj_out = nn.Linear(num_heads * dim_value, dim_input, bias=False)
+        
+        # If init_state_learnable is set, create parameters for the initial memory matrix
+        # and normalization vector; otherwise, set them to None
+        if init_state_learnable:
+            self.init_mem = nn.Parameter(torch.randn(1, self.num_heads, self.dim_key, self.dim_value))
+            self.init_z = nn.Parameter(torch.ones(1, self.num_heads, 1, 1))
+        else:
+            self.init_mem = None
+            self.init_z = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -70,9 +81,13 @@ class CompressiveMemory(nn.Module):
         out = []
 
         # Initialize mem and normalization
-        # !!! Initialization was never specified in the paper, so this is an educated guess
-        mem = torch.zeros(1, self.num_heads, self.dim_key, self.dim_value)
-        z = torch.zeros(batch_size, self.num_heads, self.dim_key, 1)
+        if self.init_mem is not None and self.init_z is not None:
+            mem = self.init_mem
+            z = self.init_z
+        else:
+            # !!! Initialization was never specified in the paper, so this is an educated guess
+            mem = torch.zeros(1, self.num_heads, self.dim_key, self.dim_value)
+            z = torch.ones(batch_size, self.num_heads, self.dim_key, 1) / self.dim_key
         
         # Project the input tensor to get the key, value, and query tensors
         k_full = self.proj_k(x).unsqueeze(1).view(
@@ -95,9 +110,6 @@ class CompressiveMemory(nn.Module):
             # Pre-calculate sigma(q) for updating memory and calculating attention
             # shape: (batch_size, num_heads, segment_len, dim_key)
             sigma_q = (nn.functional.elu(q) + 1.0)
-
-            # Apply normalization term update
-            z = z + (nn.functional.elu(k) + 1.0).sum(dim=-2, keepdim=True).transpose(-2, -1)
 
             # Apply SDP attention
             scores = q @ k.transpose(-2, -1) / self.dim_key ** 0.5
@@ -122,6 +134,9 @@ class CompressiveMemory(nn.Module):
             elif self.update == "delta":
                 mem = mem + \
                     sigma_k.transpose(-2, -1) @ (v - (sigma_k @ mem) / (sigma_k @ z))
+                    
+            # Apply normalization term update
+            z = z + (nn.functional.elu(k) + 1.0).sum(dim=-2, keepdim=True).transpose(-2, -1)
 
             # Calculate weighted average of dot-product and memory-based attention
             att = nn.functional.sigmoid(

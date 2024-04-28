@@ -21,6 +21,7 @@ class NextTokenModel(nn.Module):
         sampling_factor: int,
         update="linear",
         causal: bool = False,
+        init_state_learnable: bool = False,
         dropout: float = 0.0,
     ):
         super(NextTokenModel, self).__init__()
@@ -41,6 +42,7 @@ class NextTokenModel(nn.Module):
                         sampling_factor=sampling_factor,
                         update=update,
                         causal=causal,
+                        init_state_learnable=init_state_learnable,
                         dropout=dropout
                     )
                 )
@@ -55,6 +57,7 @@ class NextTokenModel(nn.Module):
                         segment_len=segment_len,
                         update=update,
                         causal=causal,
+                        init_state_learnable=init_state_learnable,
                         dropout=dropout
                     )
                 )

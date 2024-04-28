@@ -22,6 +22,7 @@ class InfiniTransformer(nn.Module):
         segment_len: int,
         update: str = "linear",
         causal: bool = False,
+        init_state_learnable: bool = False,
         dropout: float = 0.0
     ):
         """Initializes the module.
@@ -36,13 +37,14 @@ class InfiniTransformer(nn.Module):
             segment_len (int): Segment length for the CompressiveMemory.
             update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking for the CompressiveMemory. Defaults to False.
+            init_state_learnable (bool, optional): Whether the initial state of the CompressiveMemory should be learnable. Defaults to False.
             dropout (float, optional): Dropout rate for the MLP. Defaults to 0.0.
         """
         super(InfiniTransformer, self).__init__()
 
         # Multi-head attention
         self.attn = CompressiveMemory(
-            dim_input, dim_key, dim_value, num_heads, segment_len, update, causal)
+            dim_input, dim_key, dim_value, num_heads, segment_len, update, causal, init_state_learnable)
         # MLP
         if activation not in ACTIVATIONS:
             raise ValueError(f"Invalid activation function: {activation}")
@@ -91,6 +93,7 @@ class MoDInfiniTransformer(InfiniTransformer):
         sampling_factor: int,
         update="linear",
         causal: bool = False,
+        init_state_learnable: bool = False,
         dropout: float = 0.0
     ):
         """Instantiate module.
@@ -106,6 +109,7 @@ class MoDInfiniTransformer(InfiniTransformer):
             sampling_factor (int): Reciprocal of the sampling rate for the Mixture-of-Depths mechanism.
             update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking for the CompressiveMemory. Defaults to False.
+            init_state_learnable (bool, optional): Whether the initial state of the CompressiveMemory should be learnable. Defaults to False.
             dropout (float, optional): Dropout rate for the MLP. Defaults to 0.0.
 
         Raises:
@@ -122,6 +126,7 @@ class MoDInfiniTransformer(InfiniTransformer):
             segment_len=math.ceil(segment_len / sampling_factor),
             update=update,
             causal=causal,
+            init_state_learnable=init_state_learnable,
             dropout=dropout
         )
 
