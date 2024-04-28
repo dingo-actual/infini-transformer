@@ -2,7 +2,9 @@ import torch
 from torch import nn
 
 class CompressiveMemory(nn.Module):
-    """Implements the Compressive Transformer memory module."""
+    """Implements the Compressive Transformer memory module as described in "Leave No Context Behind:
+    Efficient Infinite Context Transformers with Infini-attention" by Munkhdalai et al.
+    (https://arxiv.org/abs/2404.07143)"""
 
     def __init__(
         self, 
@@ -12,7 +14,8 @@ class CompressiveMemory(nn.Module):
         num_heads: int, 
         segment_len: int, 
         update: str = "linear",
-        causal: bool = False
+        causal: bool = False,
+        init_state_learnable: bool = False
     ):
         """Initialize module.
 
@@ -24,6 +27,7 @@ class CompressiveMemory(nn.Module):
             segment_len (int): Segment length (must be a factor of the input sequence length).
             update (str, optional): Type of memory update rule to use ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking. Defaults to False.
+            init_state_learnable (bool, optional): Whether the initial memory and normalization are learnable. Defaults to False.
         """
         super(CompressiveMemory, self).__init__()
 
@@ -48,6 +52,15 @@ class CompressiveMemory(nn.Module):
 
         # Projection for output
         self.proj_out = nn.Linear(num_heads * dim_value, dim_input, bias=False)
+        
+        # If init_state_learnable is set, create parameters for the initial memory matrix
+        # and normalization vector; otherwise, set them to None
+        if init_state_learnable:
+            self.init_mem = nn.Parameter(torch.randn(1, self.num_heads, self.dim_key, self.dim_value))
+            self.init_z = nn.Parameter(torch.ones(1, self.num_heads, 1, 1))
+        else:
+            self.init_mem = None
+            self.init_z = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -66,9 +79,13 @@ class CompressiveMemory(nn.Module):
         out = []
 
         # Initialize mem and normalization
-        # !!! Initialization was never specified in the paper, so this is an educated guess
-        mem = torch.zeros(1, self.num_heads, self.dim_key, self.dim_value)
-        z = torch.zeros(batch_size, self.num_heads, self.dim_key, 1)
+        if self.init_mem is not None and self.init_z is not None:
+            mem = self.init_mem
+            z = self.init_z
+        else:
+            # !!! Initialization was never specified in the paper, so this is an educated guess
+            mem = torch.zeros(1, self.num_heads, self.dim_key, self.dim_value)
+            z = torch.ones(batch_size, self.num_heads, self.dim_key, 1) / self.dim_key
         
         # Project the input tensor to get the key, value, and query tensors
         k_full = self.proj_k(x).unsqueeze(1).view(
@@ -89,13 +106,12 @@ class CompressiveMemory(nn.Module):
             q = q_full[:, :, ix_lo:ix_hi, :]
             
             # Pre-calculate sigma(q) for updating memory and calculating attention
+            # The calculation is described on page 4 of the paper under the subsection
+            # "Memory retrieval"
             # shape: (batch_size, num_heads, segment_len, dim_key)
             sigma_q = (nn.functional.elu(q) + 1.0)
 
-            # Apply normalization term update
-            z = z + (nn.functional.elu(k) + 1.0).sum(dim=-2, keepdim=True).transpose(-2, -1)
-
-            # Apply SDP attention
+            # Apply SDP attention, as part of equation (2) of the paper
             scores = q @ k.transpose(-2, -1) / self.dim_key ** 0.5
 
             # If causal mask specified, calculate and apply it
@@ -104,28 +120,36 @@ class CompressiveMemory(nn.Module):
                 mask = mask.unsqueeze(0).unsqueeze(0).repeat((batch_size, self.num_heads, 1, 1))
                 scores.masked_fill_(torch.logical_not(mask), float('-inf'))
 
-            # Calculate SDP attention
+            # Calculate SDP attention, completing equation (2) of the paper
             att_dot = nn.functional.softmax(scores, dim=-1) @ v
 
             # Calculate normalized linear attention
+            # The calculation is described in equation (3) of the paper
             # shape: (batch_size, num_heads, segment_len, dim_value)
             att_mem = (sigma_q @ mem) / (sigma_q @ z)
 
             # Apply mem update
+            # The update rules are described in equations (4) and (5) of the paper
             sigma_k = nn.functional.elu(k) + 1.0
             if self.update == "linear":
                 mem = mem + sigma_k.transpose(-2, -1) @ v
             elif self.update == "delta":
                 mem = mem + \
                     sigma_k.transpose(-2, -1) @ (v - (sigma_k @ mem) / (sigma_k @ z))
+                    
+            # Apply normalization term update
+            # The calculation is described in equation (4) of the paper
+            z = z + (nn.functional.elu(k) + 1.0).sum(dim=-2, keepdim=True).transpose(-2, -1)
 
             # Calculate weighted average of dot-product and memory-based attention
+            # The calculation is described in equation (6) of the paper
             att = nn.functional.sigmoid(
                 self.betas) * att_mem + (1 - nn.functional.sigmoid(self.betas)) * att_dot
             att = att.view((batch_size, seg_len,
                         self.num_heads * self.dim_value))
 
             # Append output to buffer
+            # The calculation is described in equation (7) of the paper
             out.append(self.proj_out(att))
 
         # Return concatenated full sequence from buffer
