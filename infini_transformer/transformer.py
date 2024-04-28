@@ -148,12 +148,14 @@ class MoDInfiniTransformer(InfiniTransformer):
         if self.train:
             return self.forward_(x)
         else:
-            out = []
-            for ix in range(x.size(0)):
-                obs_out, _, _ = self.forward_(x[ix:ix+1])
-                out.append(obs_out)
-                
-            return torch.cat(out, dim=0), None, None
+            out, sample_mask, sample_scores_pred = self.forward_(x)
+            
+            # Pad the sampled sequences to the longest sequence length
+            max_seq_len = out.size(1)
+            padding_mask = torch.arange(max_seq_len, device=x.device)[None, :] < x.size(1)[:, None]
+            out = out * padding_mask.unsqueeze(-1)
+            
+            return out, sample_mask, sample_scores_pred
                 
     def forward_(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Forward pass.
@@ -212,12 +214,16 @@ class MoDInfiniTransformer(InfiniTransformer):
         # Add result of attended tokens to the result (equivalent to making the result 
         # for non-attended tokens zero)
         x[sample_mask.unsqueeze(-1).repeat((1, 1, self.dim_input))] += x_.view(-1)
-
-        # Flatten sample scores and concatenation of top-k masks for auxillary training task
+        
+        # Pad the output tensor to the original sequence length
+        padding_mask = torch.arange(x.size(1), device=x.device)[None, :] < sample_mask.view(batch_size, -1).sum(dim=1)[:, None]
+        x = x * padding_mask.unsqueeze(-1)
+        
+        # Flatten sample scores and concatenation of top-k masks for auxiliary training task
         sample_scores = sample_scores.view((-1, 1))
         sample_mask = sample_mask.view((-1, 1)).float()
 
-        return self.layer_norm(x), sample_mask, sample_scores
+        return x, sample_mask, sample_scores
 
 
 def demo_mod_infini_transformer():

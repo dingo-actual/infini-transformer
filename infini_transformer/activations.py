@@ -3,7 +3,6 @@ from typing import Optional
 
 import torch
 
-
 class Swish(torch.nn.Module):
     """Swish activation module"""
     def __init__(self, beta: Optional[float] = None):

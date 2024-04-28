@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from .. import MoDInfiniTransformer, InfiniTransformer
+from infini_transformer import MoDInfiniTransformer, InfiniTransformer
 
 
 class NextTokenModel(nn.Module):
@@ -70,11 +70,11 @@ class NextTokenModel(nn.Module):
         x = self.embedding(x)
         for ix, transformer in enumerate(self.transformers):
             if ix % 2 == 0:
-                x, mod_token_actual, mod_token_pred = transformer(x, self.attention_mask_mod)
+                x, mod_token_actual, mod_token_pred = transformer(x)
                 mod_token_actuals.append(mod_token_actual)
                 mod_token_preds.append(mod_token_pred)
             else:
-                x = transformer(x, self.attention_mask)
+                x = transformer(x)
                 
         x = self.proj_final(x)
         

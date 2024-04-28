@@ -1,4 +1,12 @@
-from .infini_transformer import InfiniTransformer, MoDInfiniTransformer
+# infini_transformer/__init__.py
 
-if __name__ == '__main__':
-    pass
+from .transformer import InfiniTransformer, MoDInfiniTransformer
+from .activations import ACTIVATIONS
+from .compressive_memory import CompressiveMemory
+
+__all__ = [
+    "InfiniTransformer",
+    "MoDInfiniTransformer",
+    "ACTIVATIONS",
+    "CompressiveMemory"
+]
