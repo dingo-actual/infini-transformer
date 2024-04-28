@@ -6,7 +6,9 @@ from torch import nn
 
 
 class CompressiveMemory(nn.Module):
-    """Implements the Compressive Transformer memory module."""
+    """Implements the Compressive Transformer memory module as described in "Leave No Context Behind:
+    Efficient Infinite Context Transformers with Infini-attention" by Munkhdalai et al.
+    (https://arxiv.org/abs/2404.07143)"""
 
     def __init__(
         self, 
@@ -108,10 +110,12 @@ class CompressiveMemory(nn.Module):
             q = q_full[:, :, ix_lo:ix_hi, :]
             
             # Pre-calculate sigma(q) for updating memory and calculating attention
+            # The calculation is described on page 4 of the paper under the subsection
+            # "Memory retrieval"
             # shape: (batch_size, num_heads, segment_len, dim_key)
             sigma_q = (nn.functional.elu(q) + 1.0)
 
-            # Apply SDP attention
+            # Apply SDP attention, as part of equation (2) of the paper
             scores = q @ k.transpose(-2, -1) / self.dim_key ** 0.5
 
             # If causal mask specified, calculate and apply it
@@ -120,14 +124,16 @@ class CompressiveMemory(nn.Module):
                 mask = mask.unsqueeze(0).unsqueeze(0).repeat((batch_size, self.num_heads, 1, 1))
                 scores.masked_fill_(torch.logical_not(mask), float('-inf'))
 
-            # Calculate SDP attention
+            # Calculate SDP attention, completing equation (2) of the paper
             att_dot = nn.functional.softmax(scores, dim=-1) @ v
 
             # Calculate normalized linear attention
+            # The calculation is described in equation (3) of the paper
             # shape: (batch_size, num_heads, segment_len, dim_value)
             att_mem = (sigma_q @ mem) / (sigma_q @ z)
 
             # Apply mem update
+            # The update rules are described in equations (4) and (5) of the paper
             sigma_k = nn.functional.elu(k) + 1.0
             if self.update == "linear":
                 mem = mem + sigma_k.transpose(-2, -1) @ v
@@ -136,15 +142,18 @@ class CompressiveMemory(nn.Module):
                     sigma_k.transpose(-2, -1) @ (v - (sigma_k @ mem) / (sigma_k @ z))
                     
             # Apply normalization term update
+            # The calculation is described in equation (4) of the paper
             z = z + (nn.functional.elu(k) + 1.0).sum(dim=-2, keepdim=True).transpose(-2, -1)
 
             # Calculate weighted average of dot-product and memory-based attention
+            # The calculation is described in equation (6) of the paper
             att = nn.functional.sigmoid(
                 self.betas) * att_mem + (1 - nn.functional.sigmoid(self.betas)) * att_dot
             att = att.view((batch_size, seg_len,
                         self.num_heads * self.dim_value))
 
             # Append output to buffer
+            # The calculation is described in equation (7) of the paper
             out.append(self.proj_out(att))
 
         # Return concatenated full sequence from buffer
