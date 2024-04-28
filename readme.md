@@ -3,6 +3,7 @@
 - [Infini-Transformer](#infini-transformer)
   - [Overview](#overview)
   - [Features](#features)
+  - [Directory structure](#directory-structure)
   - [Getting Started](#getting-started)
   - [Usage](#usage)
     - [`CompressiveMemory`](#compressivememory)
@@ -24,21 +25,41 @@ Infini-Transformer ([https://arxiv.org/abs/2404.07143](https://arxiv.org/abs/240
 - Efficient fine-tuning for task-specific adaptation
 - Includes a Mixture-of-Depths ([https://arxiv.org/abs/2404.02258](https://arxiv.org/abs/2404.02258)) transformer layer that incorporates Infini-Attention
 
+## Directory structure
+
+```
+infini-transformer/
+│
+├── infini_transformer/
+│   ├── __init__.py
+│   ├── transformer.py
+│   ├── compressive_memory.py
+│   └── activations.py
+│
+├── examples/
+│   ├── __init__.py
+│   └── modinfiniformer.py
+│
+├── tests/
+│   ├── __init__.py
+│   └── test_transformer.py
+│
+├── LICENSE
+├── README.md
+├── requirements.txt
+├── MANIFEST.in
+└── pyproject.toml
+```
+
 ## Getting Started
 
-To get started with Infini-Transformer:
+To get started with Infini-Transformer, you can clone the repository and install it from source:
 
-- Clone the repository:
-
-    ```bash
-        git clone https://github.com/dingo-actual/infini-transformer.git
-    ```
-
-- Install it from source:
-
-    ```bash
-        pip install git+https://github.com/dingo-actual/infini-transformer.git
-    ```
+```bash
+git clone https://github.com/dingo-actual/infini-transformer.git
+cd infini-transformer
+pip install -e .
+```
 
 ## Usage
 

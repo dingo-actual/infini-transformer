@@ -1,9 +1,5 @@
-from typing import Optional
-import warnings
-
 import torch
 from torch import nn
-
 
 class CompressiveMemory(nn.Module):
     """Implements the Compressive Transformer memory module as described in "Leave No Context Behind:

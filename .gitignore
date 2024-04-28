@@ -1,2 +1,34 @@
-.vscode*
-*__pycache__*
+# Compiled Python files
+*.pyc
+__pycache__/
+
+# Virtual environment
+venv/
+.venv/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Python package distribution files
+dist/
+build/
+*.egg-info/
+
+# Local development files
+.env
+.env.*
+.python-version
+
+# macOS files
+.DS_Store
+
+# Logs and temporary files
+*.log
+*.swp
+*.bak
