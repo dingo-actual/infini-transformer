@@ -153,14 +153,19 @@ class MoDInfiniTransformer(InfiniTransformer):
         if self.train:
             return self.forward_(x)
         else:
-            out, sample_mask, sample_scores_pred = self.forward_(x)
+            # !!! TEMPORARY: Each sample may have a different sequence length, resulting in a ragged array
+            # !!!            the current fix is to process each sample individually and concatenate the results
             
-            # Pad the sampled sequences to the longest sequence length
-            max_seq_len = out.size(1)
-            padding_mask = torch.arange(max_seq_len, device=x.device)[None, :] < x.size(1)[:, None]
-            out = out * padding_mask.unsqueeze(-1)
+            out = []
             
-            return out, sample_mask, sample_scores_pred
+            # Loop through samples and produce output for each
+            for ix in range(x.size(0)):
+                sample_out, _, _ = self.forward_(x[ix:ix+1,...])
+                
+            # Concatenate results
+            out = torch.cat(out, dim=0)
+            
+            return out, None, None
                 
     def forward_(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Forward pass.
