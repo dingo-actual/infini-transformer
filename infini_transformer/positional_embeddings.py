@@ -5,13 +5,7 @@ from torch import nn
 
 
 
-class PositionalEmbeddings(nn.Module):
-    """Base class for positional embeddings."""
-    def __init__(self):
-        """Instantiate the module."""
-        super(PositionalEmbeddings, self).__init__()
-
-class RoPEEmbeddings(PositionalEmbeddings):
+class RoPEEmbeddings(nn.Module):
     """Implements rotary positional embeddings (RoPE) as described in the paper:
     "RoFormer: Enhanced Transformer with Rotary Position Embedding" by Su et al.
     (https://arxiv.org/abs/2104.09864).
