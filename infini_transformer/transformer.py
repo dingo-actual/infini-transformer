@@ -91,6 +91,7 @@ class InfiniTransformer(nn.Module):
             torch.Tensor: Output tensor of shape (batch_size, seq_len, dim_input).
         """
         # Apply positional embeddings, if specified
+        # TODO: Move position embeddings call inside attention module
         if self.position_embedder is not None:
             x = self.position_embedder(x)
 
@@ -246,6 +247,7 @@ class MoDInfiniTransformer(InfiniTransformer):
         x_ = x[sample_mask.unsqueeze(-1).repeat((1, 1, self.dim_input))].view(sample_shape)
         
         # If positional embeddings are specified, apply them
+        # TODO: Move position embeddings call inside attention module
         if self.position_embedder is not None:
             x_ = self.position_embedder(x_)
         
