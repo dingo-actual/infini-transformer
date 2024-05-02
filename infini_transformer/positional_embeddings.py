@@ -1,8 +1,17 @@
+from typing import Optional
+
 import torch
 from torch import nn
 
 
-class RotaryPositionalEmbeddings(nn.Module):
+
+class PositionalEmbeddings(nn.Module):
+    """Base class for positional embeddings."""
+    def __init__(self):
+        """Instantiat the module."""
+        super(PositionalEmbeddings, self).__init__()
+
+class RotaryPositionalEmbeddings(PositionalEmbeddings):
     """Implements rotary positional embeddings (RoPE) as described in the paper:
     "RoFormer: Enhanced Transformer with Rotary Position Embedding" by Su et al.
     (https://arxiv.org/abs/2104.09864)"""
@@ -35,7 +44,7 @@ class RotaryPositionalEmbeddings(nn.Module):
         self.ixs_sin[self.ixs_sin_neg] = self.ixs_sin_neg + 1
         self.ixs_sin[self.ixs_sin_neg + 1] = self.ixs_sin_neg
         
-    def _calculate_cos_sin_components(self, offset: int = 0) -> None:
+    def _calculate_cos_sin_components(self, offset: int = 0, select_mask: Optional[torch.Tensor] = None) -> None:
         """Calculate the cosine and sine component matrices for the rotary positional embeddings.
         Uses multidimensional extension of theta as defined in Sec 3.2.2 as well as equation (34)
         from the RoFormer paper
@@ -43,18 +52,42 @@ class RotaryPositionalEmbeddings(nn.Module):
         Args:
             offset (int, optional): Position multiple offset. Defaults to 0.
         """
-        # Calculate matrix of angles: thetas[i,j] = base^(-2 * ceil(i/2)) * (j + offset)
-        # Shape: (effective_dim, seq_len)
-        thetas = torch.repeat_interleave(
-            (self.base ** (-2. * torch.arange(1, self.effective_dim//2 + 1))).unsqueeze(-1).repeat((1, self.seq_len)), 
-            repeats=2, 
-            dim=0
-        )
-        thetas *= torch.arange(1 + offset, self.seq_len + 1 + offset).unsqueeze(0)
-        
-        # Calculate cosine and sine of thetas and reshape for downstream use
-        self.cos_component = thetas.cos().unsqueeze(0).unsqueeze(0)
-        self.sin_component = thetas.sin().unsqueeze(0).unsqueeze(0)
+        # TODO: make sure output tensor shapes are correct
+        if select_mask is None:
+            # Calculate matrix of angles: thetas[i,j] = base^(-2 * ceil(i/2)) * (j + offset)
+            thetas = torch.repeat_interleave(
+                (self.base ** (-2. * torch.arange(1, self.effective_dim//2 + 1))).unsqueeze(-1).repeat((1, self.seq_len)), 
+                repeats=2, 
+                dim=0
+            )
+            # Multiply by index positions, then transpose to get correct shape
+            thetas *= torch.arange(1 + offset, self.seq_len + 1 + offset).unsqueeze(0)
+            thetas = thetas.transpose(0, 1)
+            
+            # Calculate cosine and sine of thetas and reshape for downstream use
+            # Shape: (1, 1, seq_len, effective_dim)
+            self.cos_component = thetas.cos().unsqueeze(0).unsqueeze(0)
+            self.sin_component = thetas.sin().unsqueeze(0).unsqueeze(0)
+        else:
+            # !!! Double-check this branch by hand !!!
+            # (n_obs, select_seq_len)
+            select_ixs = 1 + offset + torch.argwhere(select_mask)[:, 1].view((select_mask.size(0), -1))
+            # (n_obs, select_seq_len, effective_dim)
+            select_ixs = select_ixs.unsqueeze(-1).repeat((1, 1, self.effective_dim))
+            # (effective_dim, select_seq_len)
+            thetas = torch.repeat_interleave(
+                (self.base ** (-2. * torch.arange(1, self.effective_dim//2 + 1))).unsqueeze(-1).repeat((1, select_ixs.size(1))), 
+                repeats=2, 
+                dim=0
+            )
+            # (n_obs, select_seq_len, effective_dim)
+            thetas = thetas.transpose(0, 1).unsqueeze(0).repeat((select_mask.size(0), 1, 1))
+            # !!! Incomplete after here !!!
+            thetas *= select_ixs
+            
+            # Calculate cosine and sine of thetas and reshape for downstream use
+            self.cos_component = thetas.cos().unsqueeze(1)
+            self.sin_component = thetas.sin().unsqueeze(1)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Applies rotary positional embeddings to the input tensor. Uses a multidimensional
