@@ -24,6 +24,7 @@ Infini-Transformer ([https://arxiv.org/abs/2404.07143](https://arxiv.org/abs/240
 - Support for multiple downstream tasks, including text classification, question answering, and language generation
 - Efficient fine-tuning for task-specific adaptation
 - Includes a Mixture-of-Depths ([https://arxiv.org/abs/2404.02258](https://arxiv.org/abs/2404.02258)) transformer layer that incorporates Infini-Attention
+- In Progress: Implementation of RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864)) that conforms to Infini-Attention's and Mixture-of-Depth's memory-efficient designs (YaRN and PoSE to be added soon)
 
 ## Directory structure
 
@@ -34,6 +35,7 @@ infini-transformer/
 │   ├── __init__.py
 │   ├── transformer.py
 │   ├── compressive_memory.py
+│   ├── positional_embeddings.py
 │   └── activations.py
 │
 ├── examples/
@@ -153,6 +155,13 @@ The `InfiniTransformer` module takes the following arguments:
 - `update`: The type of update to use for the memory matrix. Can be "linear" or "delta". (Default is "linear".)
 - `causal`: Whether to use causal attention in SDP calculations (where each position can only attend to previous positions). (Default is False.)
 - `dropout`: The dropout rate to apply in the MLP. (Default is 0.0.)
+- `positional_embeddings`: The type of positional embeddings to apply. The following embedding methods are supported:
+
+  - `"rope"`: RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864))
+  - `"yarn"`: YaRN ([https://arxiv.org/abs/2309.00071](https://arxiv.org/abs/2309.00071))
+  - `"rope_pose"`: RoPE with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
+  - `"yarn_pose"`: YaRN with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
+  - `"none"`: No positional embedding (default)
 
 Example usage of the `InfiniTransformer` module is as follows:
 
@@ -172,7 +181,8 @@ tfm = InfiniTransformer(
     segment_len=2048,
     update="delta",
     causal=True,
-    dropout=0.1
+    dropout=0.1,
+    positional_embeddings="rope"
 )
 
 batch = torch.randn(
@@ -228,6 +238,13 @@ The `MoDInfiniTransformer` module takes the following arguments:
 - `update`: The type of update to use for the memory matrix. Can be "linear" or "delta". (Default is "linear".)
 - `causal`: Whether to use causal attention in SDP calculations (where each position can only attend to previous positions). (Default is False.)
 - `dropout`: The dropout rate to apply in the MLP. (Default is 0.0.)
+- - `positional_embeddings`: The type of positional embeddings to apply. The following embedding methods are supported:
+
+  - `"rope"`: RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864))
+  - `"yarn"`: YaRN ([https://arxiv.org/abs/2309.00071](https://arxiv.org/abs/2309.00071))
+  - `"rope_pose"`: RoPE with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
+  - `"yarn_pose"`: YaRN with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
+  - `"none"`: No positional embedding (default)
 
 Example usage of the `InfiniTransformer` module is as follows:
 
@@ -248,7 +265,8 @@ tfm = MoDInfiniTransformer(
     sampling_factor=8,
     update="delta",
     causal=True,
-    dropout=0.1
+    dropout=0.1,
+    positional_embeddings="rope"
 )
 
 batch = torch.randn(
