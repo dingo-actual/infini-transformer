@@ -8,13 +8,16 @@ from torch import nn
 class PositionalEmbeddings(nn.Module):
     """Base class for positional embeddings."""
     def __init__(self):
-        """Instantiat the module."""
+        """Instantiate the module."""
         super(PositionalEmbeddings, self).__init__()
 
-class RotaryPositionalEmbeddings(PositionalEmbeddings):
+class RoPEEmbeddings(PositionalEmbeddings):
     """Implements rotary positional embeddings (RoPE) as described in the paper:
     "RoFormer: Enhanced Transformer with Rotary Position Embedding" by Su et al.
-    (https://arxiv.org/abs/2104.09864)"""
+    (https://arxiv.org/abs/2104.09864).
+    
+    Modifications have been made to make it compatible with both Infini-Attention
+    and Mixture-of-Experts."""
     def __init__(self, dim: int, seq_len: int, dim_embedding_pct: float = 0.5, base: int = 10000):
         """Instantiate the module.
 
@@ -24,7 +27,7 @@ class RotaryPositionalEmbeddings(PositionalEmbeddings):
             dim_embedding_pct (float): Percentage of the total embedding dimension to use for the positional embeddings. Must be within the interval (0, 1]. Defaults to 0.5.
             base (int, optional): Base used for calculating thetas. Defaults to 10000.
         """
-        super(RotaryPositionalEmbeddings, self).__init__()
+        super(RoPEEmbeddings, self).__init__()
         
         # Record input parameters
         self.dim = dim
@@ -32,6 +35,7 @@ class RotaryPositionalEmbeddings(PositionalEmbeddings):
         self.seq_len = seq_len
         self.dim_embedding_pct = dim_embedding_pct
         self.base = base
+        self.last_offset = 0
         
         # Initialize cos and sin component matrices
         self._calculate_cos_sin_components()
@@ -50,9 +54,9 @@ class RotaryPositionalEmbeddings(PositionalEmbeddings):
         from the RoFormer paper
 
         Args:
-            offset (int, optional): Position multiple offset. Defaults to 0.
+            offset (int, optional): Position offset for Infini-Former compatibility. Defaults to 0.
+            select_mask (Optional[torch.Tensor], optional): Mask to select a subset of the positional embeddings for Mixture-of-Depths compatibility. Defaults to None.
         """
-        # TODO: make sure output tensor shapes are correct
         if select_mask is None:
             # Calculate matrix of angles: thetas[i,j] = base^(-2 * ceil(i/2)) * (j + offset)
             thetas = torch.repeat_interleave(
@@ -69,7 +73,6 @@ class RotaryPositionalEmbeddings(PositionalEmbeddings):
             self.cos_component = thetas.cos().unsqueeze(0).unsqueeze(0)
             self.sin_component = thetas.sin().unsqueeze(0).unsqueeze(0)
         else:
-            # !!! Double-check this branch by hand !!!
             # (n_obs, select_seq_len)
             select_ixs = 1 + offset + torch.argwhere(select_mask)[:, 1].view((select_mask.size(0), -1))
             # (n_obs, select_seq_len, effective_dim)
@@ -82,42 +85,62 @@ class RotaryPositionalEmbeddings(PositionalEmbeddings):
             )
             # (n_obs, select_seq_len, effective_dim)
             thetas = thetas.transpose(0, 1).unsqueeze(0).repeat((select_mask.size(0), 1, 1))
-            # !!! Incomplete after here !!!
             thetas *= select_ixs
             
             # Calculate cosine and sine of thetas and reshape for downstream use
             self.cos_component = thetas.cos().unsqueeze(1)
             self.sin_component = thetas.sin().unsqueeze(1)
         
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, offset: int = 0, select_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Applies rotary positional embeddings to the input tensor. Uses a multidimensional
         extension of equation (34) of the RoFormer paper.
 
         Args:
             x (torch.Tensor): Input tensor of shape (batch_size, num_heads, seq_len, dim).
+            offset (int, optional): Position offset for Infini-Former compatibility. Defaults to 0.
+            select_mask (Optional[torch.Tensor], optional): Mask to select a subset of the positional embeddings for Mixture-of-Depths compatibility. Defaults to None.
 
         Returns:
             torch.Tensor: Transformed input tensor with rotary positional embeddings applied.
         """
+        if offset != self.last_offset:
+            self._calculate_cos_sin_components(offset=offset, select_mask=select_mask)
+            self.last_offset = offset
+            cos_sin_recalculated = True
+        else:
+            cos_sin_recalculated = False
+        
         if self.dim_embedding_pct < 1.0:
             x_pos = x[..., :self.effective_dim]
             x_pass = x[..., self.effective_dim:]
         else:
             x_pos = x
-        # If the sequence length is less than the maximum sequence length, perform calculations
-        # with truncated cos_component and sin_component, along the sequence axis
-        if x.size(2) < self.seq_len:
-            x_cos = self.cos_component[:, :, :x_pos.size(2), :].repeat(x_pos.size(0), x_pos.size(1), 1, 1) * x
-            x_sin = x_pos[..., self.ixs_sin]
-            x_sin[..., self.ixs_sin_neg] = -x_sin[...,self.ixs_sin_neg]
-            x_sin *= self.sin_component[:, :, :x_pos.size(2), :].repeat(x_pos.size(0), x_pos.size(1), 1, 1)
-        # Otherwise, perform calculations with the full cos_component and sin_component
-        else:
-            x_cos = self.cos_component.repeat(x_pos.size(0), x_pos.size(1), 1, 1) * x
-            x_sin = x_pos[..., self.ixs_sin]
-            x_sin[..., self.ixs_sin_neg] = -x_sin[...,self.ixs_sin_neg]
-            x_sin *= self.sin_component.repeat(x_pos.size(0), x_pos.size(1), 1, 1)
         
+        # If no selection mask is specified, add embeddings as usual
+        if select_mask is None:
+            # If the sequence length is less than the maximum sequence length, perform calculations
+            # with truncated cos_component and sin_component, along the sequence axis
+            if x.size(2) < self.seq_len:
+                x_cos = self.cos_component[:, :, :x_pos.size(2), :].repeat(x_pos.size(0), x_pos.size(1), 1, 1) * x_pos
+                x_sin = x_pos[..., self.ixs_sin]
+                x_sin[..., self.ixs_sin_neg] = -x_sin[...,self.ixs_sin_neg]
+                x_sin *= self.sin_component[:, :, :x_pos.size(2), :].repeat(x_pos.size(0), x_pos.size(1), 1, 1)
+            # Otherwise, perform calculations with the full cos_component and sin_component
+            else:
+                x_cos = self.cos_component.repeat(x_pos.size(0), x_pos.size(1), 1, 1) * x_pos
+                x_sin = x_pos[..., self.ixs_sin]
+                x_sin[..., self.ixs_sin_neg] = -x_sin[...,self.ixs_sin_neg]
+                x_sin *= self.sin_component.repeat(x_pos.size(0), x_pos.size(1), 1, 1)
+        # If a selection mask is specified, incorporate it into the positional embeddings
+        else:
+            if not cos_sin_recalculated:
+                self._calculate_cos_sin_components(offset=offset, select_mask=select_mask)
+                self.last_offset = offset
+            x_cos = self.cos_component.repeat(1, x_pos.size(1), 1, 1) * x_pos
+            x_sin = x_pos[..., self.ixs_sin]
+            x_sin[..., self.ixs_sin_neg] = -x_sin[...,self.ixs_sin_neg]
+            x_sin *= self.sin_component.repeat(1, x_pos.size(1), 1, 1)
+            
         # If the sequence length is less than the maximum sequence length, concatenate positionally embedded
         # entries with original entries, otherwise return the positionally embedded entries
         if self.dim_embedding_pct < 1.0:
