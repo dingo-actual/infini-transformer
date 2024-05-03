@@ -94,8 +94,18 @@ The `CompressiveMemory` module takes the following arguments:
 - `dim_value`: The dimension of the value tensor.
 - `num_heads`: The number of attention heads.
 - `segment_len`: The length of each segment in the recurrent attention computation.
-- `update`: The type of update to use for the memory matrix. Can be "linear" or "delta".
-- `causal`: Whether to use causal attention in SDP calculations (where each position can only attend to previous positions).
+- `sampling_factor`: The sampling factor used if using Mixture-of-Depths (use None if not using Mixture-of-Depths). (Default is None.)
+- `update`: The type of update to use for the memory matrix. Can be "linear" or "delta". (Default is "linear".)
+- `causal`: Whether to use causal attention in SDP calculations (where each position can only attend to previous positions). (Default is False.)
+- `positional_embeddings`: The type of positional embeddings to apply. The following embedding methods are supported:
+
+  - `"rope"`: RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864))
+  - `"yarn"`: YaRN ([https://arxiv.org/abs/2309.00071](https://arxiv.org/abs/2309.00071))
+  - `"rope_pose"`: RoPE with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
+  - `"yarn_pose"`: YaRN with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
+  - `"none"`: No positional embedding (default)
+  
+- `init_state_learnable`: Whether the initial memory state and normalization vector are learnable parameters. (Default is False.)
 
 Example usage of the `CompressiveMemory` module is as follows:
 
@@ -111,8 +121,11 @@ cm = CompressiveMemory(
     dim_value=64,
     num_heads=8,
     segment_len=2048,
+    sampling_factor=None,
     update="linear",
-    causal=True
+    causal=True,
+    positional_embeddings="rope",
+    init_state_learnable=False
 )
 
 batch = torch.randn(
@@ -154,7 +167,6 @@ The `InfiniTransformer` module takes the following arguments:
 - `segment_len`: The length of each segment in the recurrent attention computation.
 - `update`: The type of update to use for the memory matrix. Can be "linear" or "delta". (Default is "linear".)
 - `causal`: Whether to use causal attention in SDP calculations (where each position can only attend to previous positions). (Default is False.)
-- `dropout`: The dropout rate to apply in the MLP. (Default is 0.0.)
 - `positional_embeddings`: The type of positional embeddings to apply. The following embedding methods are supported:
 
   - `"rope"`: RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864))
@@ -162,6 +174,9 @@ The `InfiniTransformer` module takes the following arguments:
   - `"rope_pose"`: RoPE with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
   - `"yarn_pose"`: YaRN with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
   - `"none"`: No positional embedding (default)
+
+- `init_state_learnable`: Whether the initial memory state and normalization vector are learnable parameters. (Default is False.)
+- `dropout`: The dropout rate to apply in the MLP. (Default is 0.0.)
 
 Example usage of the `InfiniTransformer` module is as follows:
 
@@ -181,8 +196,9 @@ tfm = InfiniTransformer(
     segment_len=2048,
     update="delta",
     causal=True,
-    dropout=0.1,
-    positional_embeddings="rope"
+    positional_embeddings="rope",
+    init_state_learnable=False,
+    dropout=0.1
 )
 
 batch = torch.randn(
@@ -237,14 +253,16 @@ The `MoDInfiniTransformer` module takes the following arguments:
 - `sampling_factor`: A numeric value in the interval (1, `segment_len`) that determines the number of tokens to select from each segment during the top-k selection. A larger value of `sampling_factor` results in fewer tokens being selected.
 - `update`: The type of update to use for the memory matrix. Can be "linear" or "delta". (Default is "linear".)
 - `causal`: Whether to use causal attention in SDP calculations (where each position can only attend to previous positions). (Default is False.)
-- `dropout`: The dropout rate to apply in the MLP. (Default is 0.0.)
-- - `positional_embeddings`: The type of positional embeddings to apply. The following embedding methods are supported:
+- `positional_embeddings`: The type of positional embeddings to apply. The following embedding methods are supported:
 
   - `"rope"`: RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864))
   - `"yarn"`: YaRN ([https://arxiv.org/abs/2309.00071](https://arxiv.org/abs/2309.00071))
   - `"rope_pose"`: RoPE with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
   - `"yarn_pose"`: YaRN with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
   - `"none"`: No positional embedding (default)
+
+- `init_state_learnable`: Whether the initial memory state and normalization vector are learnable parameters. (Default is False.)
+- `dropout`: The dropout rate to apply in the MLP. (Default is 0.0.)
 
 Example usage of the `InfiniTransformer` module is as follows:
 
@@ -265,8 +283,9 @@ tfm = MoDInfiniTransformer(
     sampling_factor=8,
     update="delta",
     causal=True,
-    dropout=0.1,
-    positional_embeddings="rope"
+    init_state_learnable=False,
+    positional_embeddings="rope",
+    dropout=0.1
 )
 
 batch = torch.randn(
