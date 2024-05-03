@@ -24,11 +24,11 @@ Infini-Transformer ([https://arxiv.org/abs/2404.07143](https://arxiv.org/abs/240
 - Support for multiple downstream tasks, including text classification, question answering, and language generation
 - Efficient fine-tuning for task-specific adaptation
 - Includes a Mixture-of-Depths ([https://arxiv.org/abs/2404.02258](https://arxiv.org/abs/2404.02258)) transformer layer that incorporates Infini-Attention
-- In Progress: Implementation of RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864)) that conforms to Infini-Attention's and Mixture-of-Depth's memory-efficient designs (YaRN and PoSE to be added soon)
+- Implementation of RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864)) that conforms to Infini-Attention's and Mixture-of-Depth's memory-efficient designs (YaRN and PoSE to be added soon)
 
 ## Directory structure
 
-```
+```default
 infini-transformer/
 │
 ├── infini_transformer/
