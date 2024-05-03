@@ -23,9 +23,9 @@ class InfiniTransformer(nn.Module):
         segment_len: int,
         update: str = "linear",
         causal: bool = False,
+        positional_embeddings: Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']] = 'none',
         init_state_learnable: bool = False,
-        dropout: float = 0.0,
-        positional_embeddings: Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']] = 'none'
+        dropout: float = 0.0
     ):
         """Initializes the module.
 
@@ -39,32 +39,15 @@ class InfiniTransformer(nn.Module):
             segment_len (int): Segment length for the CompressiveMemory.
             update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking for the CompressiveMemory. Defaults to False.
+            positional_embeddings (Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']], optional): Type of positional embeddings to use. Defaults to 'none'.
             init_state_learnable (bool, optional): Whether the initial state of the CompressiveMemory should be learnable. Defaults to False.
             dropout (float, optional): Dropout rate for the MLP. Defaults to 0.0.
-            positional_embeddings (Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']], optional): Type of positional embeddings to use. Defaults to 'none'.
         """
         super(InfiniTransformer, self).__init__()
         
-        # Create positional embedder
-        if positional_embeddings == 'rope':
-            self.position_embedder = RoPEEmbeddings(
-                dim=dim_input,
-                seq_len=segment_len,
-            )
-        elif positional_embeddings == 'yarn':
-            raise NotImplementedError("YaRN positional embeddings are not implemented yet.")
-        elif positional_embeddings == 'rope_pose':
-            raise NotImplementedError("RoPE positional embeddings with PoSE are not implemented yet.")
-        elif positional_embeddings == 'yarn_pose':
-            raise NotImplementedError("YaRN positional embeddings with PoSE are not implemented yet.")
-        elif positional_embeddings == 'none':
-            self.position_embedder = None
-        else:
-            raise ValueError(f"Unsupported positional embeddings type: {positional_embeddings}")
-
         # Multi-head attention
         self.attn = CompressiveMemory(
-            dim_input, dim_key, dim_value, num_heads, segment_len, update, causal, init_state_learnable)
+            dim_input, dim_key, dim_value, num_heads, segment_len, update, causal, positional_embeddings, init_state_learnable)
         # MLP
         if activation not in ACTIVATIONS:
             raise ValueError(f"Invalid activation function: {activation}")
@@ -90,11 +73,6 @@ class InfiniTransformer(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, seq_len, dim_input).
         """
-        # Apply positional embeddings, if specified
-        # TODO: Move position embeddings call inside attention module
-        if self.position_embedder is not None:
-            x = self.position_embedder(x)
-
         # Apply multi-head attention, followed by MLP and layer normalization with residual connection.
         x_ = self.attn(x)
         x_ = self.mlp(x_)
@@ -117,9 +95,9 @@ class MoDInfiniTransformer(InfiniTransformer):
         sampling_factor: int,
         update="linear",
         causal: bool = False,
+        positional_embeddings: Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']] = 'none',
         init_state_learnable: bool = False,
-        dropout: float = 0.0,
-        positional_embeddings: Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']] = 'none'
+        dropout: float = 0.0
     ):
         """Instantiate module.
 
@@ -134,12 +112,9 @@ class MoDInfiniTransformer(InfiniTransformer):
             sampling_factor (int): Reciprocal of the sampling rate for the Mixture-of-Depths mechanism.
             update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking for the CompressiveMemory. Defaults to False.
+            positional_embeddings (Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']], optional): Type of positional embeddings to use. Defaults to 'none'.
             init_state_learnable (bool, optional): Whether the initial state of the CompressiveMemory should be learnable. Defaults to False.
             dropout (float, optional): Dropout rate for the MLP. Defaults to 0.0.
-            positional_embeddings (Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']], optional): Type of positional embeddings to use. Defaults to 'none'.
-
-        Raises:
-            ValueError: Segment length not divisible by sampling factor.
         """
         # Initialize ordinary InfiniTransformer, but with segment length reduced by sampling_factor
         super(MoDInfiniTransformer, self).__init__(
@@ -152,9 +127,9 @@ class MoDInfiniTransformer(InfiniTransformer):
             segment_len=math.ceil(segment_len / sampling_factor),
             update=update,
             causal=causal,
+            positional_embeddings=positional_embeddings,
             init_state_learnable=init_state_learnable,
-            dropout=dropout,
-            positional_embeddings=positional_embeddings
+            dropout=dropout
         )
 
         # Record additional init arguments for forward pass
@@ -188,6 +163,7 @@ class MoDInfiniTransformer(InfiniTransformer):
             # Loop through samples and produce output for each
             for ix in range(x.size(0)):
                 sample_out, _, _ = self.forward_(x[ix:ix+1,...])
+                out.append(sample_out)
                 
             # Concatenate results
             out = torch.cat(out, dim=0)
@@ -246,13 +222,8 @@ class MoDInfiniTransformer(InfiniTransformer):
         sample_shape = (batch_size, self.segment_len * num_segments, self.dim_input)
         x_ = x[sample_mask.unsqueeze(-1).repeat((1, 1, self.dim_input))].view(sample_shape)
         
-        # If positional embeddings are specified, apply them
-        # TODO: Move position embeddings call inside attention module
-        if self.position_embedder is not None:
-            x_ = self.position_embedder(x_)
-        
         # Apply multi-head attention to sample, followed by MLP
-        x_ = self.attn(x_)
+        x_ = self.attn(x_, sample_mask=sample_mask)
         x_ = self.mlp(x_)
 
         # Add result of attended tokens to the result (equivalent to making the result 

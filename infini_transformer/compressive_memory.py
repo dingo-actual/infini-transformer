@@ -1,5 +1,9 @@
+from typing import Literal, Optional, Union
+
 import torch
 from torch import nn
+
+from .positional_embeddings import RoPEEmbeddings
 
 class CompressiveMemory(nn.Module):
     """Implements the Compressive Transformer memory module as described in "Leave No Context Behind:
@@ -15,6 +19,7 @@ class CompressiveMemory(nn.Module):
         segment_len: int, 
         update: str = "linear",
         causal: bool = False,
+        positional_embeddings: Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']] = 'none',
         init_state_learnable: bool = False
     ):
         """Initialize module.
@@ -27,6 +32,7 @@ class CompressiveMemory(nn.Module):
             segment_len (int): Segment length (must be a factor of the input sequence length).
             update (str, optional): Type of memory update rule to use ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking. Defaults to False.
+            positional_embeddings (Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']], optional): Type of positional embeddings to use. Defaults to 'none'.
             init_state_learnable (bool, optional): Whether the initial memory and normalization are learnable. Defaults to False.
         """
         super(CompressiveMemory, self).__init__()
@@ -41,6 +47,23 @@ class CompressiveMemory(nn.Module):
 
         self.update = update
         self.causal = causal
+        
+        # Create positional embedder
+        if positional_embeddings == 'rope':
+            self.position_embedder = RoPEEmbeddings(
+                dim=dim_key,
+                seq_len=segment_len,
+            )
+        elif positional_embeddings == 'yarn':
+            raise NotImplementedError("YaRN positional embeddings are not implemented yet.")
+        elif positional_embeddings == 'rope_pose':
+            raise NotImplementedError("RoPE positional embeddings with PoSE are not implemented yet.")
+        elif positional_embeddings == 'yarn_pose':
+            raise NotImplementedError("YaRN positional embeddings with PoSE are not implemented yet.")
+        elif positional_embeddings == 'none':
+            self.position_embedder = None
+        else:
+            raise ValueError(f"Unsupported positional embeddings type: {positional_embeddings}")
 
         # Projections for stacked SDP attention
         self.proj_k = nn.Linear(dim_input, num_heads * dim_key, bias=False)
@@ -62,12 +85,13 @@ class CompressiveMemory(nn.Module):
             self.init_mem = None
             self.init_z = None
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, sample_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
-        Applies Scaled Dot-Product Attention to the input tensor.
+        Applies Compressive Memory Attention to the input tensor.
 
         Args:
             x (torch.Tensor): Input tensor of shape (batch_size, seq_len, dim_input).
+            sample_mask (Optional[torch.Tensor], optional): Mask tensor of shape (batch_size, seq_len) used to sample the input sequence. Defaults to None.
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, seq_len, dim_input).
         """
@@ -105,6 +129,17 @@ class CompressiveMemory(nn.Module):
             v = v_full[:, :, ix_lo:ix_hi, :]
             q = q_full[:, :, ix_lo:ix_hi, :]
             
+            # If sample_mask was given, extract segment from it
+            if sample_mask is not None:
+                sample_mask_seg = sample_mask[:, ix_lo:ix_hi]
+            else:
+                sample_mask_seg = None
+            
+            # If position embedder is specified, add positional embeddings to q and k
+            if self.position_embedder is not None:
+                k_pos = self.position_embedder(k, offset=ix_lo, select_mask=sample_mask_seg)
+                q_pos = self.position_embedder(q, offset=ix_lo, select_mask=sample_mask_seg)
+            
             # Pre-calculate sigma(q) for updating memory and calculating attention
             # The calculation is described on page 4 of the paper under the subsection
             # "Memory retrieval"
@@ -112,7 +147,10 @@ class CompressiveMemory(nn.Module):
             sigma_q = (nn.functional.elu(q) + 1.0)
 
             # Apply SDP attention, as part of equation (2) of the paper
-            scores = q @ k.transpose(-2, -1) / self.dim_key ** 0.5
+            if self.position_embedder is not None:
+                scores = q_pos @ k_pos.transpose(-2, -1) / self.dim_key ** 0.5
+            else:
+                scores = q @ k.transpose(-2, -1) / self.dim_key ** 0.5
 
             # If causal mask specified, calculate and apply it
             if self.causal:
