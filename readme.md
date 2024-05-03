@@ -228,7 +228,7 @@ As such, the output from `ModInfiniTransformer` is a tuple consisting of three t
 
 At inference time, the second and third elements of the tuple can be safely ignored, as all token selection logic is handled within the `MoDInfiniTransformer` module itself.
 
-**IMPORTANT NOTE**: The binary-classifier-based token selection mechanism for inference has no guarantee of selecting the same number of tokens for each element in a batch. If left unchecked, this would result in a ragged array, which is currently unsupported by PyTorch. The current solution in place is to force the batch size to 1 and concatenate forward passes over single observations. We are aware this is sub-optimal and hope to address it in the near future.
+> **IMPORTANT NOTE**: The binary-classifier-based token selection mechanism for inference has no guarantee of selecting the same number of tokens for each element in a batch. If left unchecked, this would result in a ragged array, which is currently unsupported by PyTorch. The current solution in place is to force the batch size to 1 and concatenate forward passes over single observations. We are aware this is sub-optimal and hope to address it in the near future.
 
 The `MoDInfiniTransformer` module takes the following arguments:
 
