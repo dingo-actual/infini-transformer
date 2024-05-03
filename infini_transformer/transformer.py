@@ -6,7 +6,6 @@ from torch import nn
 
 from .activations import ACTIVATIONS
 from .compressive_memory import CompressiveMemory
-from .positional_embeddings import RoPEEmbeddings
 
 
 class InfiniTransformer(nn.Module):
