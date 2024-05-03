@@ -11,7 +11,10 @@ def test_infini_transformer():
     num_heads = 8
     activation = "ffngeglu"
     segment_len = 2048
-    update = "linear"
+    update = "delta"
+    causal = True
+    positional_embeddings = "rope"
+    init_state_learnable = True
     dropout = 0.1
 
     layer = InfiniTransformer(
@@ -23,6 +26,9 @@ def test_infini_transformer():
         activation=activation,
         segment_len=segment_len,
         update=update,
+        causal=causal,
+        positional_embeddings=positional_embeddings,
+        init_state_learnable=init_state_learnable,
         dropout=dropout
     )
 
@@ -45,6 +51,9 @@ def test_mod_infini_transformer():
     segment_len = 1024
     sampling_factor = 8
     update = "delta"
+    causal = True
+    positional_embeddings = "rope"
+    init_state_learnable = True
     dropout = 0.2
 
     layer = MoDInfiniTransformer(
@@ -57,6 +66,9 @@ def test_mod_infini_transformer():
         segment_len=segment_len,
         sampling_factor=sampling_factor,
         update=update,
+        causal=causal,
+        positional_embeddings=positional_embeddings,
+        init_state_learnable=init_state_learnable,
         dropout=dropout
     )
 
@@ -70,3 +82,8 @@ def test_mod_infini_transformer():
     assert x_att.shape == (batch_size, seq_len, dim_input)
     assert sample_mask.shape == (batch_size * seq_len, 1)
     assert sample_scores_pred.shape == (batch_size * seq_len, 1)
+    
+    
+if __name__=="__main__":
+    test_infini_transformer()
+    test_mod_infini_transformer()
