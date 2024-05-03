@@ -24,7 +24,8 @@ class InfiniTransformer(nn.Module):
         causal: bool = False,
         positional_embeddings: Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']] = 'none',
         init_state_learnable: bool = False,
-        dropout: float = 0.0
+        dropout: float = 0.0,
+        **kwargs
     ):
         """Initializes the module.
 
@@ -44,9 +45,21 @@ class InfiniTransformer(nn.Module):
         """
         super(InfiniTransformer, self).__init__()
         
+        # If sampling_factor passed to kwargs, use it, otherwise set to None
+        sampling_factor = kwargs.get("sampling_factor", None)
+        
         # Multi-head attention
         self.attn = CompressiveMemory(
-            dim_input, dim_key, dim_value, num_heads, segment_len, update, causal, positional_embeddings, init_state_learnable)
+            dim_input=dim_input, 
+            dim_key=dim_key, 
+            dim_value=dim_value, 
+            num_heads=num_heads, 
+            segment_len=segment_len, 
+            sampling_factor=sampling_factor,
+            update=update, 
+            causal=causal, 
+            positional_embeddings=positional_embeddings, 
+            init_state_learnable=init_state_learnable)
         # MLP
         if activation not in ACTIVATIONS:
             raise ValueError(f"Invalid activation function: {activation}")
@@ -128,7 +141,8 @@ class MoDInfiniTransformer(InfiniTransformer):
             causal=causal,
             positional_embeddings=positional_embeddings,
             init_state_learnable=init_state_learnable,
-            dropout=dropout
+            dropout=dropout,
+            sampling_factor=sampling_factor
         )
 
         # Record additional init arguments for forward pass
@@ -151,7 +165,7 @@ class MoDInfiniTransformer(InfiniTransformer):
             torch.Tensor: Token selection mask of shape (batch_size * seq_len, 1) or None.
             torch.Tensor: Predicted token selection scores of shape (batch_size * seq_len, 1) or None.
         """
-        if self.train:
+        if self.training:
             return self.forward_(x)
         else:
             # !!! TEMPORARY: Each sample may have a different sequence length, resulting in a ragged array
@@ -197,7 +211,7 @@ class MoDInfiniTransformer(InfiniTransformer):
             ix_lo = seg_num * self.full_segment_len
             ix_hi = ix_lo + self.full_segment_len
 
-            if self.train:
+            if self.training:
                 # During training, take the top-k tokens by score
                 # Argsort by sample scores to get indices of tokens to keep
                 sort_ixs = torch.argsort(

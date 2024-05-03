@@ -17,6 +17,7 @@ class CompressiveMemory(nn.Module):
         dim_value: int, 
         num_heads: int, 
         segment_len: int, 
+        sampling_factor: Optional[int] = None,
         update: str = "linear",
         causal: bool = False,
         positional_embeddings: Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']] = 'none',
@@ -30,6 +31,7 @@ class CompressiveMemory(nn.Module):
             dim_value (int): Value dimension.
             num_heads (int): Number of attention heads.
             segment_len (int): Segment length (must be a factor of the input sequence length).
+            sampling_factor (Optional[int], optional): Reciprocal of the sampling rate for the Mixture-of-Depths mechanism. Defaults to None.
             update (str, optional): Type of memory update rule to use ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking. Defaults to False.
             positional_embeddings (Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']], optional): Type of positional embeddings to use. Defaults to 'none'.
@@ -40,6 +42,7 @@ class CompressiveMemory(nn.Module):
         # Record input parameters
         self.num_heads = num_heads
         self.segment_len = segment_len
+        self.sampling_factor = sampling_factor
 
         self.dim_input = dim_input
         self.dim_key = dim_key
@@ -80,7 +83,7 @@ class CompressiveMemory(nn.Module):
         # and normalization vector; otherwise, set them to None
         if init_state_learnable:
             self.init_mem = nn.Parameter(torch.randn(1, self.num_heads, self.dim_key, self.dim_value))
-            self.init_z = nn.Parameter(torch.ones(1, self.num_heads, 1, 1))
+            self.init_z = nn.Parameter(torch.ones(1, self.num_heads, self.dim_key, 1))
         else:
             self.init_mem = None
             self.init_z = None
@@ -131,7 +134,11 @@ class CompressiveMemory(nn.Module):
             
             # If sample_mask was given, extract segment from it
             if sample_mask is not None:
-                sample_mask_seg = sample_mask[:, ix_lo:ix_hi]
+                if self.sampling_factor is None:
+                    raise ValueError("sampling_factor must be specified if sample_mask is provided")
+                ix_lo_seg = ix * self.segment_len * self.sampling_factor
+                ix_hi_seg = min(ix_lo_seg + self.segment_len * self.sampling_factor, sample_mask.size(1))
+                sample_mask_seg = sample_mask[:, ix_lo_seg:ix_hi_seg]
             else:
                 sample_mask_seg = None
             
