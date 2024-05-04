@@ -144,8 +144,12 @@ class CompressiveMemory(nn.Module):
             
             # If position embedder is specified, add positional embeddings to q and k
             if self.position_embedder is not None:
-                k_pos = self.position_embedder(k, offset=ix_lo, select_mask=sample_mask_seg)
-                q_pos = self.position_embedder(q, offset=ix_lo, select_mask=sample_mask_seg)
+                if sample_mask is None:
+                    k_pos = self.position_embedder(k, offset=ix_lo)
+                    q_pos = self.position_embedder(q, offset=ix_lo)
+                else:
+                    k_pos = self.position_embedder(k, offset=ix_lo_seg, select_mask=sample_mask_seg)
+                    q_pos = self.position_embedder(q, offset=ix_lo_seg, select_mask=sample_mask_seg)
             
             # Pre-calculate sigma(q) for updating memory and calculating attention
             # The calculation is described on page 4 of the paper under the subsection
