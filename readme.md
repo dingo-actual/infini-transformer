@@ -241,14 +241,7 @@ The `MoDInfiniTransformer` module takes the following arguments:
 - `sampling_factor`: A numeric value in the interval (1, `segment_len`) that determines the number of tokens to select from each segment during the top-k selection. A larger value of `sampling_factor` results in fewer tokens being selected.
 - `update`: The type of update to use for the memory matrix. Can be "linear" or "delta". (Default is "linear".)
 - `causal`: Whether to use causal attention in SDP calculations (where each position can only attend to previous positions). (Default is False.)
-- `positional_embedder`: The type of positional embeddings to apply. The following embedding methods are supported:
-
-  - `"rope"`: RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864))
-  - `"yarn"`: YaRN ([https://arxiv.org/abs/2309.00071](https://arxiv.org/abs/2309.00071))
-  - `"rope_pose"`: RoPE with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
-  - `"yarn_pose"`: YaRN with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
-  - `"none"`: No positional embedding (default)
-
+- `positional_embedder`: An optional `PositionEmbeddings` object: `RoPEEmbeddings` or `YaRNEmbeddings` (Default is None.)
 - `init_state_learnable`: Whether the initial memory state and normalization vector are learnable parameters. (Default is False.)
 - `dropout`: The dropout rate to apply in the MLP. (Default is 0.0.)
 
