@@ -9,6 +9,8 @@
     - [`CompressiveMemory`](#compressivememory)
     - [`InfiniTransformer`](#infinitransformer)
     - [`MoDInfiniTransformer`](#modinfinitransformer)
+    - [`RoPEEmbeddings`](#ropeembeddings)
+    - [`YaRNEmbeddings`](#yarnembeddings)
     - [Example Usage](#example-usage)
   - [License](#license)
   - [Acknowledgments](#acknowledgments)
@@ -35,7 +37,7 @@ infini-transformer/
 │   ├── __init__.py
 │   ├── transformer.py
 │   ├── compressive_memory.py
-│   ├── positional_embeddings.py
+│   ├── positional_embedder.py
 │   └── activations.py
 │
 ├── examples/
@@ -97,14 +99,7 @@ The `CompressiveMemory` module takes the following arguments:
 - `sampling_factor`: The sampling factor used if using Mixture-of-Depths (use None if not using Mixture-of-Depths). (Default is None.)
 - `update`: The type of update to use for the memory matrix. Can be "linear" or "delta". (Default is "linear".)
 - `causal`: Whether to use causal attention in SDP calculations (where each position can only attend to previous positions). (Default is False.)
-- `positional_embeddings`: The type of positional embeddings to apply. The following embedding methods are supported:
-
-  - `"rope"`: RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864))
-  - `"yarn"`: YaRN ([https://arxiv.org/abs/2309.00071](https://arxiv.org/abs/2309.00071))
-  - `"rope_pose"`: RoPE with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
-  - `"yarn_pose"`: YaRN with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
-  - `"none"`: No positional embedding (default)
-  
+- `positional_embedder`: An optional `PositionEmbeddings` object: `RoPEEmbeddings` or `YaRNEmbeddings` (Default is None.)
 - `init_state_learnable`: Whether the initial memory state and normalization vector are learnable parameters. (Default is False.)
 
 Example usage of the `CompressiveMemory` module is as follows:
@@ -124,7 +119,7 @@ cm = CompressiveMemory(
     sampling_factor=None,
     update="linear",
     causal=True,
-    positional_embeddings="rope",
+    positional_embedder="rope",
     init_state_learnable=False
 )
 
@@ -167,14 +162,7 @@ The `InfiniTransformer` module takes the following arguments:
 - `segment_len`: The length of each segment in the recurrent attention computation.
 - `update`: The type of update to use for the memory matrix. Can be "linear" or "delta". (Default is "linear".)
 - `causal`: Whether to use causal attention in SDP calculations (where each position can only attend to previous positions). (Default is False.)
-- `positional_embeddings`: The type of positional embeddings to apply. The following embedding methods are supported:
-
-  - `"rope"`: RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864))
-  - `"yarn"`: YaRN ([https://arxiv.org/abs/2309.00071](https://arxiv.org/abs/2309.00071))
-  - `"rope_pose"`: RoPE with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
-  - `"yarn_pose"`: YaRN with PoSE ([https://arxiv.org/abs/2309.10400](https://arxiv.org/abs/2309.10400))
-  - `"none"`: No positional embedding (default)
-
+- `positional_embedder`: An optional `PositionEmbeddings` object: `RoPEEmbeddings` or `YaRNEmbeddings` (Default is None.)
 - `init_state_learnable`: Whether the initial memory state and normalization vector are learnable parameters. (Default is False.)
 - `dropout`: The dropout rate to apply in the MLP. (Default is 0.0.)
 
@@ -196,7 +184,7 @@ tfm = InfiniTransformer(
     segment_len=2048,
     update="delta",
     causal=True,
-    positional_embeddings="rope",
+    positional_embedder=None,
     init_state_learnable=False,
     dropout=0.1
 )
@@ -253,7 +241,7 @@ The `MoDInfiniTransformer` module takes the following arguments:
 - `sampling_factor`: A numeric value in the interval (1, `segment_len`) that determines the number of tokens to select from each segment during the top-k selection. A larger value of `sampling_factor` results in fewer tokens being selected.
 - `update`: The type of update to use for the memory matrix. Can be "linear" or "delta". (Default is "linear".)
 - `causal`: Whether to use causal attention in SDP calculations (where each position can only attend to previous positions). (Default is False.)
-- `positional_embeddings`: The type of positional embeddings to apply. The following embedding methods are supported:
+- `positional_embedder`: The type of positional embeddings to apply. The following embedding methods are supported:
 
   - `"rope"`: RoPE ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864))
   - `"yarn"`: YaRN ([https://arxiv.org/abs/2309.00071](https://arxiv.org/abs/2309.00071))
@@ -284,7 +272,7 @@ tfm = MoDInfiniTransformer(
     update="delta",
     causal=True,
     init_state_learnable=False,
-    positional_embeddings="rope",
+    positional_embedder=None,
     dropout=0.1
 )
 
@@ -298,6 +286,116 @@ output, select_target, select_pred = tfm(batch)
 ```
 
 During training, we must account for the additional outputs from `MoDInfiniFormer` so we can use them for the binary cross-entropy loss. See [infini_transformer/example/modinfiniformer.py](infini_transformer/example/modinfiniformer.py) for an example of how to incorporate the additional outputs into both the overall model output and the training loop.
+
+### `RoPEEmbeddings`
+
+The `RoPEEmbeddings` module applies RoPE from the paper, "RoFormer: Enhanced Transformer with Rotary Position Embedding" by Su, et. al. ([https://arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864)). Once instantiated, it can be passed to the `InfiniTransformer` or `MoDInfiniTransformer` modules as the `positional_embedder` parameter, which passes it through to `CompressiveMemory`, where the position-aware embeddings are applied to the key and query tensors.
+
+The `RoPEEmbeddings` module takes the following arguments:
+
+- `dim`: The dimension of the key/value tensors.
+- `seq_len`: The maximum length of the input sequence to `CompressiveMemory` (this must match `CompressiveMemory`'s `segment_len` parameter).
+- `dim_embeddings_pct`: The proportion of the key/value tensor dimension to use for the position-aware embeddings. For example, if `dim` is 64 and `dim_embeddings_pct` is 0.5, then 32 dimensions will be used for the position-aware embeddings. (Default is 0.5.)
+- `base`: The base value to use for the position embedding angles. (Default is 10000.)
+
+Example usage of the `RoPEEmbeddings` module is as follows:
+
+```python
+import torch
+
+from infini_transformer import InfiniTransformer
+from infini_transformer import RoPEEmbeddings
+
+embedder = RoPEEmbeddings(
+  dim=64, # must match dim_key parameter in InfiniTransformer
+  seq_len=2048, # must match segment_len parameter in InfiniTransformer
+  dim_embeddings_pct=0.5,
+  base=10000
+)
+
+tfm = InfiniTransformer(
+    dim_input=768,
+    dim_hidden=2048,
+    dim_key=64, # must match dim parameter in RoPEEmbeddings
+    dim_value=64,
+    num_heads=8,
+    activation="ffngeglu",
+    segment_len=2048, # must match seq_len parameter in RoPEEmbeddings
+    update="delta",
+    causal=True,
+    positional_embedder=embedder,
+    init_state_learnable=False,
+    dropout=0.1
+)
+
+batch = torch.randn(
+    2, # batch size
+    65536, # sequence length
+    768 # input dimension
+)
+
+output = tfm(batch)
+```
+
+### `YaRNEmbeddings`
+
+The `YaRNEmbeddings` module applies YaRN from the paper, "YaRN: Efficient Context Window Extension of Large Language Models" by Peng, et. al. ([https://arxiv.org/abs/2309.00071](https://arxiv.org/abs/2309.00071)). Once instantiated, it can be passed to the `InfiniTransformer` or `MoDInfiniTransformer` modules as the `positional_embedder` parameter, which passes it through to `CompressiveMemory`, where the position-aware embeddings are applied to the key and query tensors.
+
+The `YaRNEmbeddings` module takes the following arguments:
+
+- `dim`: The dimension of the key/value tensors.
+- `seq_len`: The maximum length of the input sequence to `CompressiveMemory` (this must match `CompressiveMemory`'s `segment_len` parameter).
+- `context_len`: Context length used during training.
+- `context_len_ext`: Context length to extend to.
+- `dim_embeddings_pct`: The proportion of the key/value tensor dimension to use for the position-aware embeddings. For example, if `dim` is 64 and `dim_embeddings_pct` is 0.5, then 32 dimensions will be used for the position-aware embeddings. (Default is 0.5.)
+- `base`: The base value to use for the position embedding angles. (Default is 10000.)
+- `alpha`: Interpolation minimum for dynamic scaling. (Default is 1.)
+- `beta`: Interpolation minimum for dynamic scaling. (Default is 32.)
+- `len_scale`: Length scale for attention calculation. Defaults to None (automatically calculated).
+
+Example usage of the `YaRNEmbeddings` module is as follows:
+
+```python
+import torch
+
+from infini_transformer import InfiniTransformer
+from infini_transformer import YaRNEmbeddings
+
+embedder = YaRNEmbeddings(
+  dim=64, # must match dim_key in InfiniTransformer
+  seq_len=2048, # must match segment_len parameter in InfiniTransformer
+  context_len=32768,
+  context_len_ext=65536,
+  dim_embeddings_pct=0.5,
+  base=10000,
+  alpha=1,
+  beta=32,
+  len_scale=None
+)
+
+tfm = InfiniTransformer(
+    dim_input=768,
+    dim_hidden=2048,
+    dim_key=64, # must match dim in YaRNEmbeddings
+    dim_value=64,
+    num_heads=8,
+    activation="ffngeglu",
+    segment_len=2048, # must match seq_len parameter in YaRNEmbeddings
+    update="delta",
+    causal=True,
+    positional_embedder=embedder,
+    init_state_learnable=False,
+    dropout=0.1
+)
+
+batch = torch.randn(
+    2, # batch size
+    65536, # sequence length
+    768 # input dimension
+)
+
+output = tfm(batch)
+```
 
 ### Example Usage
 
