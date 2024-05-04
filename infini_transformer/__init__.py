@@ -1,12 +1,14 @@
 # infini_transformer/__init__.py
 
-from .transformer import InfiniTransformer, MoDInfiniTransformer
-from .activations import ACTIVATIONS
 from .compressive_memory import CompressiveMemory
+from .positional_embeddings import RoPEEmbeddings, YaRNEmbeddings
+from .transformer import InfiniTransformer, MoDInfiniTransformer
+
 
 __all__ = [
     "InfiniTransformer",
     "MoDInfiniTransformer",
-    "ACTIVATIONS",
-    "CompressiveMemory"
+    "CompressiveMemory",
+    "RoPEEmbeddings",
+    "YaRNEmbeddings"
 ]
