@@ -1,8 +1,8 @@
 # tests/test_transformer.py
 
 import torch
-from infini_transformer.transformer import InfiniTransformer, MoDInfiniTransformer
-from infini_transformer.positional_embeddings import YaRNEmbeddings
+from infini_transformer import InfiniTransformer, MoDInfiniTransformer
+from infini_transformer import YaRNEmbeddings
 
 def test_infini_transformer():
     dim_input = 512
