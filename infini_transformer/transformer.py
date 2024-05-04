@@ -271,7 +271,6 @@ def demo_mod_infini_transformer():
     update = "linear"
     dropout = 0.1
     position_embedder = None
-    
 
     # Define batch dimensions
     seq_len = 4096
