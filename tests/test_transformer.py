@@ -2,6 +2,7 @@
 
 import torch
 from infini_transformer.transformer import InfiniTransformer, MoDInfiniTransformer
+from infini_transformer.positional_embeddings import YaRNEmbeddings
 
 def test_infini_transformer():
     dim_input = 512
@@ -13,9 +14,20 @@ def test_infini_transformer():
     segment_len = 2048
     update = "delta"
     causal = True
-    positional_embeddings = "rope"
     init_state_learnable = True
     dropout = 0.1
+    
+    positional_embedder = YaRNEmbeddings(
+        dim=dim_key,
+        seq_len=segment_len,
+        context_len=32000,
+        context_len_ext=64000,
+        dim_embedding_pct=0.5,
+        base=10000,
+        alpha=1,
+        beta=32,
+        length_scale=None
+    )
 
     layer = InfiniTransformer(
         dim_input=dim_input,
@@ -27,7 +39,7 @@ def test_infini_transformer():
         segment_len=segment_len,
         update=update,
         causal=causal,
-        positional_embeddings=positional_embeddings,
+        positional_embedder=positional_embedder,
         init_state_learnable=init_state_learnable,
         dropout=dropout
     )
@@ -52,9 +64,20 @@ def test_mod_infini_transformer():
     sampling_factor = 8
     update = "delta"
     causal = True
-    positional_embeddings = "rope"
     init_state_learnable = True
     dropout = 0.2
+    
+    positional_embedder = YaRNEmbeddings(
+        dim=dim_key,
+        seq_len=segment_len,
+        context_len=32000,
+        context_len_ext=64000,
+        dim_embedding_pct=0.5,
+        base=10000,
+        alpha=1,
+        beta=32,
+        length_scale=None
+    )
 
     layer = MoDInfiniTransformer(
         dim_input=dim_input,
@@ -67,7 +90,7 @@ def test_mod_infini_transformer():
         sampling_factor=sampling_factor,
         update=update,
         causal=causal,
-        positional_embeddings=positional_embeddings,
+        position_embedder=positional_embedder,
         init_state_learnable=init_state_learnable,
         dropout=dropout
     )
