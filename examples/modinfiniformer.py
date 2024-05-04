@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from infini_transformer import MoDInfiniTransformer, InfiniTransformer
+from infini_transformer import MoDInfiniTransformer, InfiniTransformer, YaRNEmbeddings
 
 
 class NextTokenModel(nn.Module):
@@ -62,6 +62,17 @@ class NextTokenModel(nn.Module):
                         sampling_factor=sampling_factor,
                         update=update,
                         causal=causal,
+                        position_embedder=YaRNEmbeddings(
+                            dim=dim_key,
+                            seq_len=segment_len,
+                            context_len=32768,
+                            context_len_ext=65536,
+                            dim_embedding_pct=0.5,
+                            base=10000,
+                            alpha=1,
+                            beta=32,
+                            length_scale=None
+                        ),
                         init_state_learnable=init_state_learnable,
                         dropout=dropout
                     )
@@ -77,6 +88,17 @@ class NextTokenModel(nn.Module):
                         segment_len=segment_len,
                         update=update,
                         causal=causal,
+                        position_embedder=YaRNEmbeddings(
+                            dim=dim_key,
+                            seq_len=segment_len,
+                            context_len=32768,
+                            context_len_ext=65536,
+                            dim_embedding_pct=0.5,
+                            base=10000,
+                            alpha=1,
+                            beta=32,
+                            length_scale=None
+                        ),
                         init_state_learnable=init_state_learnable,
                         dropout=dropout
                     )
