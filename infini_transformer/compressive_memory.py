@@ -3,7 +3,7 @@ from typing import Literal, Optional, Union
 import torch
 from torch import nn
 
-from .positional_embeddings import RoPEEmbeddings
+from .positional_embeddings import PositionEmbeddings
 
 class CompressiveMemory(nn.Module):
     """Implements the Compressive Transformer memory module as described in "Leave No Context Behind:
@@ -20,7 +20,7 @@ class CompressiveMemory(nn.Module):
         sampling_factor: Optional[int] = None,
         update: str = "linear",
         causal: bool = False,
-        positional_embeddings: Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']] = 'none',
+        position_embedder: Optional[PositionEmbeddings] = None,
         init_state_learnable: bool = False
     ):
         """Initialize module.
@@ -34,7 +34,7 @@ class CompressiveMemory(nn.Module):
             sampling_factor (Optional[int], optional): Reciprocal of the sampling rate for the Mixture-of-Depths mechanism. Defaults to None.
             update (str, optional): Type of memory update rule to use ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking. Defaults to False.
-            positional_embeddings (Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']], optional): Type of positional embeddings to use. Defaults to 'none'.
+            position_embedder (Optional[PositionEmbeddings], optional): Position embedding module. Defaults to None.
             init_state_learnable (bool, optional): Whether the initial memory and normalization are learnable. Defaults to False.
         """
         super(CompressiveMemory, self).__init__()
@@ -51,22 +51,7 @@ class CompressiveMemory(nn.Module):
         self.update = update
         self.causal = causal
         
-        # Create positional embedder
-        if positional_embeddings == 'rope':
-            self.position_embedder = RoPEEmbeddings(
-                dim=dim_key,
-                seq_len=segment_len,
-            )
-        elif positional_embeddings == 'yarn':
-            raise NotImplementedError("YaRN positional embeddings are not implemented yet.")
-        elif positional_embeddings == 'rope_pose':
-            raise NotImplementedError("RoPE positional embeddings with PoSE are not implemented yet.")
-        elif positional_embeddings == 'yarn_pose':
-            raise NotImplementedError("YaRN positional embeddings with PoSE are not implemented yet.")
-        elif positional_embeddings == 'none':
-            self.position_embedder = None
-        else:
-            raise ValueError(f"Unsupported positional embeddings type: {positional_embeddings}")
+        self.position_embedder = position_embedder
 
         # Projections for stacked SDP attention
         self.proj_k = nn.Linear(dim_input, num_heads * dim_key, bias=False)
@@ -145,11 +130,11 @@ class CompressiveMemory(nn.Module):
             # If position embedder is specified, add positional embeddings to q and k
             if self.position_embedder is not None:
                 if sample_mask is None:
-                    k_pos = self.position_embedder(k, offset=ix_lo)
-                    q_pos = self.position_embedder(q, offset=ix_lo)
+                    k_pos = self.position_embedder(k, total_seq_len=seq_len, offset=ix_lo)
+                    q_pos = self.position_embedder(q, total_seq_len=seq_len, offset=ix_lo)
                 else:
-                    k_pos = self.position_embedder(k, offset=ix_lo_seg, select_mask=sample_mask_seg)
-                    q_pos = self.position_embedder(q, offset=ix_lo_seg, select_mask=sample_mask_seg)
+                    k_pos = self.position_embedder(k, total_seq_len=seq_len, offset=ix_lo_seg, select_mask=sample_mask_seg)
+                    q_pos = self.position_embedder(q, total_seq_len=seq_len, offset=ix_lo_seg, select_mask=sample_mask_seg)
             
             # Pre-calculate sigma(q) for updating memory and calculating attention
             # The calculation is described on page 4 of the paper under the subsection

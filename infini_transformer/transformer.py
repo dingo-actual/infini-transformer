@@ -6,6 +6,7 @@ from torch import nn
 
 from .activations import ACTIVATIONS
 from .compressive_memory import CompressiveMemory
+from .positional_embeddings import PositionEmbeddings
 
 
 class InfiniTransformer(nn.Module):
@@ -22,7 +23,7 @@ class InfiniTransformer(nn.Module):
         segment_len: int,
         update: str = "linear",
         causal: bool = False,
-        positional_embeddings: Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']] = 'none',
+        position_embedder: Optional[PositionEmbeddings] = None,
         init_state_learnable: bool = False,
         dropout: float = 0.0,
         **kwargs
@@ -39,7 +40,7 @@ class InfiniTransformer(nn.Module):
             segment_len (int): Segment length for the CompressiveMemory.
             update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking for the CompressiveMemory. Defaults to False.
-            positional_embeddings (Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']], optional): Type of positional embeddings to use. Defaults to 'none'.
+            position_embedder (Optional[PositionEmbeddings], optional): Position embedding module for the CompressiveMemory. Defaults to None.
             init_state_learnable (bool, optional): Whether the initial state of the CompressiveMemory should be learnable. Defaults to False.
             dropout (float, optional): Dropout rate for the MLP. Defaults to 0.0.
         """
@@ -58,7 +59,7 @@ class InfiniTransformer(nn.Module):
             sampling_factor=sampling_factor,
             update=update, 
             causal=causal, 
-            positional_embeddings=positional_embeddings, 
+            position_embedder=position_embedder, 
             init_state_learnable=init_state_learnable)
         # MLP
         if activation not in ACTIVATIONS:
@@ -107,7 +108,7 @@ class MoDInfiniTransformer(InfiniTransformer):
         sampling_factor: int,
         update="linear",
         causal: bool = False,
-        positional_embeddings: Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']] = 'none',
+        position_embedder: Optional[PositionEmbeddings] = None,
         init_state_learnable: bool = False,
         dropout: float = 0.0
     ):
@@ -124,7 +125,7 @@ class MoDInfiniTransformer(InfiniTransformer):
             sampling_factor (int): Reciprocal of the sampling rate for the Mixture-of-Depths mechanism.
             update (str, optional): Type of memory update rule to use for the CompressiveMemory ("linear" or "delta"). Defaults to "linear".
             causal (bool, optional): Whether to use causal attention masking for the CompressiveMemory. Defaults to False.
-            positional_embeddings (Union[Literal['rope'], Literal['yarn'], Literal['rope_pose'], Literal['yarn_pose'], Literal['none']], optional): Type of positional embeddings to use. Defaults to 'none'.
+            position_embedder (Optional[PositionEmbeddings], optional): Position embedding module for the CompressiveMemory. Defaults to None.
             init_state_learnable (bool, optional): Whether the initial state of the CompressiveMemory should be learnable. Defaults to False.
             dropout (float, optional): Dropout rate for the MLP. Defaults to 0.0.
         """
@@ -139,7 +140,7 @@ class MoDInfiniTransformer(InfiniTransformer):
             segment_len=math.ceil(segment_len / sampling_factor),
             update=update,
             causal=causal,
-            positional_embeddings=positional_embeddings,
+            position_embedder=position_embedder,
             init_state_learnable=init_state_learnable,
             dropout=dropout,
             sampling_factor=sampling_factor
@@ -269,7 +270,7 @@ def demo_mod_infini_transformer():
     sampling_factor = 8
     update = "linear"
     dropout = 0.1
-    positional_embeddings = "rope"
+    position_embedder = None
     
 
     # Define batch dimensions
@@ -288,7 +289,7 @@ def demo_mod_infini_transformer():
         sampling_factor=sampling_factor,
         update=update,
         dropout=dropout,
-        positional_embeddings=positional_embeddings
+        position_embedder=position_embedder
     )
 
     # Generate dummy batch
